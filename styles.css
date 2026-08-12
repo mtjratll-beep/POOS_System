@@ -1,0 +1,172 @@
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: Tahoma, sans-serif; }
+body { background: #f0f4f8; color: #333; direction: rtl; text-align: right; padding-bottom: 75px; }
+.screen { display: none; }
+.screen.active { display: block; }
+
+#login-screen.active { display: flex; justify-content: center; align-items: center; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #1e3c72, #2a5298); z-index: 9999; }
+.auth-card { background: #fff; padding: 25px; border-radius: 12px; width: 90%; max-width: 380px; box-shadow: 0 8px 25px rgba(0,0,0,0.3); }
+.auth-card h2 { text-align: center; margin-bottom: 15px; color: #1e3c72; font-size: 18px; }
+.form-group { margin-bottom: 12px; }
+.form-group label { display: block; margin-bottom: 4px; font-size: 12px; font-weight: bold; color: #444; }
+.form-group input, .form-group select { width: 100%; padding: 9px; border: 1px solid #ccc; border-radius: 6px; font-size: 13px; }
+.btn-main { width: 100%; padding: 11px; background: #27ae60; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 14px; margin-top: 5px; box-shadow: 0 4px 10px rgba(39, 174, 96, 0.3); }
+
+header { background: #1e3c72; color: white; padding: 12px 15px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; border-bottom: 4px solid #f39c12; }
+.logo-area { display: flex; align-items: center; gap: 10px; }
+.header-logo-img { height: 35px; width: auto; background: white; border-radius: 4px; padding: 2px; }
+.settings-btn { background: #f39c12; color: white; border: none; padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: bold; }
+
+#settings-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
+#settings-modal.active { display: flex; }
+
+#barcode-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 10005; justify-content: center; align-items: center; flex-direction: column; }
+#barcode-modal.active { display: flex; }
+#reader { width: 100%; max-width: 350px; background: #fff; border-radius: 8px; overflow: hidden; padding: 10px; }
+
+.modal-card { background: #fff; padding: 20px; border-radius: 10px; width: 90%; max-width: 420px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); max-height: 90vh; overflow-y: auto; }
+.modal-card h3 { margin-bottom: 12px; color: #1e3c72; font-size: 16px; }
+
+.bottom-nav { position: fixed; bottom: 0; left: 0; width: 100%; background: #1e3c72; display: flex; justify-content: space-around; padding: 8px 4px; z-index: 1000; box-shadow: 0 -3px 10px rgba(0,0,0,0.3); overflow-x: auto; border-top: 2px solid #2a5298; }
+.nav-btn { background: #2a5298; color: white; border: none; padding: 6px 8px; border-radius: 6px; cursor: pointer; font-size: 10px; font-weight: bold; white-space: nowrap; transition: 0.2s; }
+.nav-btn.active { background: #f39c12; color: #fff; }
+
+.container { padding: 12px; max-width: 100%; margin: 0 auto; }
+.card { background: white; padding: 14px; border-radius: 10px; box-shadow: 0 3px 12px rgba(0,0,0,0.08); margin-bottom: 12px; border-top: 4px solid #1e3c72; }
+
+.grid-2 { display: grid; grid-template-columns: 1fr; gap: 12px; }
+@media(min-width: 768px) { .grid-2 { grid-template-columns: 1.2fr 1fr; } }
+@media(min-width: 1024px) { .grid-2 { grid-template-columns: 1.4fr 1fr; } }
+
+.products-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(105px, 1fr)); gap: 8px; max-height: 380px; overflow-y: auto; margin-top: 8px; }
+.p-card { background: #fdfefe; border: 1px solid #e1e8ed; border-radius: 8px; padding: 10px; cursor: pointer; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.03); transition: 0.2s; }
+.p-card:hover { border-color: #f39c12; background: #fef9e7; transform: translateY(-2px); }
+.p-card h4 { font-size: 12px; color: #1e3c72; margin-bottom: 4px; }
+.p-card span { font-size: 11px; color: #e67e22; font-weight: bold; display: block; }
+.p-card img { transition: transform 0.2s; }
+.p-card:hover img { transform: scale(1.05); }
+
+/* صورة المنتج في المخزن */
+.inv-product-img { width: 46px; height: 46px; object-fit: cover; border-radius: 6px; border: 1px solid #ddd; cursor: pointer; transition: transform 0.2s; }
+.inv-product-img:hover { transform: scale(1.15); border-color: #f39c12; }
+.inv-no-img { width: 46px; height: 46px; background: #f0f4f8; border: 1px dashed #bbb; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 9px; color: #aaa; }
+
+/* نافذة عرض صورة المنتج */
+#product-image-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 100006; justify-content: center; align-items: center; }
+#product-image-modal.active { display: flex; }
+#product-image-modal img { max-width: 90%; max-height: 80vh; border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,0.5); }
+
+/* معاينة السندات والفواتير المنفصلة */
+.voucher-title-bar { color: #fff; padding: 10px; border-radius: 8px; margin: 10px 0; text-align: center; }
+.voucher-title-bar h3 { margin: 0; font-size: 20px; letter-spacing: 1px; }
+.voucher-details-box { background: #f8f9fa; border: 1px solid #ddd; border-radius: 8px; padding: 12px; font-size: 13px; line-height: 2; text-align: right; }
+.voucher-sign-row { display: flex; justify-content: space-between; margin-top: 30px; font-size: 12px; color: #333; }
+
+.invoice-box { border: 1px solid #e1e8ed; padding: 8px; border-radius: 6px; max-height: 200px; overflow-y: auto; margin-bottom: 8px; background: #fafbfc; }
+.actions-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+.actions-grid button { padding: 9px 4px; border: none; border-radius: 6px; font-weight: bold; color: white; cursor: pointer; font-size: 11px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+
+table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 12px; }
+th, td { border: 1px solid #e1e8ed; padding: 7px; text-align: right; }
+th { background: #1e3c72; color: white; }
+tr:nth-child(even) { background: #f9fbfd; }
+
+.editable-input { width: 100%; padding: 4px; border: 1px solid #ddd; border-radius: 4px; font-size: 11px; }
+.unit-toggle-btn { background: #e67e22; color: white; border: none; padding: 2px 5px; border-radius: 3px; cursor: pointer; font-size: 10px; white-space: nowrap; }
+
+/* تصميم كيبورد الأرقام الجانبي المنبثق السريع */
+.mini-num-pad {
+    background: #ffffff;
+    border: 2px solid #1e3c72;
+    border-radius: 10px;
+    padding: 8px;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+    width: 180px;
+    user-select: none;
+    animation: fadeInKeypad 0.12s ease-out;
+}
+@keyframes fadeInKeypad {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}
+.keypad-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 5px;
+}
+.keypad-grid button {
+    padding: 10px 0;
+    font-size: 15px;
+    font-weight: bold;
+    border: 1px solid #dcdde1;
+    border-radius: 6px;
+    background: #f5f6fa;
+    color: #2f3640;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+.keypad-grid button:active {
+    background: #dcdde1;
+}
+.keypad-fraction-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 5px;
+    margin-top: 5px;
+}
+.keypad-fraction-row button {
+    padding: 9px 0;
+    font-size: 13px;
+    font-weight: bold;
+    border: 1px solid #1e3c72;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+.keypad-fraction-row button:active {
+    background: #1e3c72 !important;
+    color: #fff !important;
+}
+
+#printable-invoice { display: none; }
+
+@media print {
+    body * { visibility: hidden !important; }
+    #printable-invoice, #printable-invoice * { visibility: visible !important; }
+
+    body.print-mode-normal #printable-invoice {
+        display: block !important; position: absolute; top: 0; right: 0; width: 100%;
+        background: #fff !important; color: #000 !important; padding: 25px; direction: rtl; font-family: Tahoma, sans-serif;
+    }
+    body.print-mode-normal .print-header { text-align: center; border-bottom: 3px solid #1e3c72; padding-bottom: 12px; margin-bottom: 15px; }
+    body.print-mode-normal .print-header img { max-height: 70px; margin-bottom: 8px; display: block; margin-left: auto; margin-right: auto; }
+    body.print-mode-normal .print-header h2 { font-size: 22px; color: #1e3c72; margin-bottom: 4px; }
+    body.print-mode-normal .print-details { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 15px; background: #f8f9fa; padding: 10px; border-radius: 6px; border: 1px solid #ddd; }
+    body.print-mode-normal .print-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 12px; }
+    body.print-mode-normal .print-table th, body.print-mode-normal .print-table td { border: 1px solid #333 !important; padding: 8px; text-align: center; }
+    body.print-mode-normal .print-table th { background: #1e3c72 !important; color: #fff !important; }
+    body.print-mode-normal .print-footer { text-align: center; font-size: 12px; margin-top: 30px; border-top: 1px dashed #777; padding-top: 10px; }
+
+    body.print-mode-thermal #printable-invoice {
+        display: block !important; position: absolute; top: 0; right: 0; width: 80mm;
+        background: #fff !important; color: #000 !important; padding: 5px; direction: rtl; font-family: Tahoma, sans-serif; font-size: 11px;
+    }
+    body.print-mode-thermal .print-header { text-align: center; border-bottom: 1px dashed #000; padding-bottom: 5px; margin-bottom: 6px; }
+    body.print-mode-thermal .print-header img { max-height: 45px; margin-bottom: 4px; display: block; margin-left: auto; margin-right: auto; }
+    body.print-mode-thermal .print-header h2 { font-size: 14px; margin-bottom: 2px; }
+    body.print-mode-thermal .print-details { font-size: 10px; margin-bottom: 6px; border-bottom: 1px dashed #000; padding-bottom: 5px; line-height: 1.4; }
+    body.print-mode-thermal .print-table { width: 100%; border-collapse: collapse; margin-bottom: 6px; font-size: 10px; }
+    body.print-mode-thermal .print-table th, body.print-mode-thermal .print-table td { border: 1px solid #000 !important; padding: 4px; text-align: center; }
+    body.print-mode-thermal .print-table th { background: #eee !important; color: #000 !important; }
+    body.print-mode-thermal .print-footer { text-align: center; font-size: 9px; margin-top: 10px; border-top: 1px dashed #000; padding-top: 5px; }
+
+    /* طباعة السندات (سند قبض / سند صرف / الديون) */
+    body.print-mode-thermal #printable-invoice .voucher-title-bar { padding: 5px; margin: 4px 0; border: 1px solid #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body.print-mode-thermal #printable-invoice .voucher-title-bar h3 { font-size: 14px; }
+    body.print-mode-thermal #printable-invoice .voucher-details-box { font-size: 10px; padding: 5px; line-height: 1.6; border: 1px dashed #000; }
+    body.print-mode-thermal #printable-invoice .voucher-sign-row { margin-top: 15px; font-size: 9px; }
+    body.print-mode-thermal #printable-invoice img[alt] { max-height: 40px; }
+
+    body.print-mode-normal #printable-invoice .voucher-title-bar { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    body.print-mode-normal #printable-invoice .voucher-details-box { border: 1px solid #333; }
+    body.print-mode-normal #printable-invoice .voucher-sign-row { margin-top: 35px; }
+}

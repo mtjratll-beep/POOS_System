@@ -1,0 +1,3189 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام محاسبي قافلة الصحراء</title>
+    <!-- أيقونة تطبيق قافلة الصحراء ثابته بدون نت -->
+    <link rel="apple-touch-icon" id="app-icon-apple" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M10 20 h15 l15 40 h40 l10 -30 h-55' fill='none' stroke='%231e3c72' stroke-width='8'/><circle cx='45' cy='75' r='8' fill='%231e3c72'/><circle cx='75' cy='75' r='8' fill='%231e3c72'/></svg>">
+    <link rel="icon" id="app-icon-fav" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M10 20 h15 l15 40 h40 l10 -30 h-55' fill='none' stroke='%231e3c72' stroke-width='8'/><circle cx='45' cy='75' r='8' fill='%231e3c72'/><circle cx='75' cy='75' r='8' fill='%231e3c72'/></svg>">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="manifest" href="manifest.json">
+    <!-- مكتبة تشغيل الكاميرا الحقيقية والماسح الضوئي للباركود -->
+    <script src="html5-qrcode.min.js"></script>
+    <!-- مكتبة حفظ الفاتورة كـ PDF (تعمل بدون إنترنت) -->
+    <script src="html2pdf.bundle.min.js"></script>
+</head>
+<body id="app-body" onclick="handleBodyClick(event)">
+
+    <!-- شاشة تسجيل الدخول العادية -->
+    <div id="login-screen" class="screen active">
+        <div id="install-container" style="display:none; text-align:center; padding: 20px; margin-bottom: 15px; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+            <div style="display:flex; align-items:center; justify-content:center; gap:12px; margin-bottom:12px;">
+                <img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M10 20 h15 l15 40 h40 l10 -30 h-55' fill='none' stroke='white' stroke-width='8'/><circle cx='45' cy='75' r='8' fill='white'/><circle cx='75' cy='75' r='8' fill='white'/></svg>" style="width:45px; height:45px;" alt="شعار">
+                <div style="text-align:right;">
+                    <h3 style="margin:0; color:#fff; font-size:16px;">نظام محاسبي قافلة الصحراء</h3>
+                    <p style="margin:2px 0 0 0; color:#aaccff; font-size:11px;">ثبّت التطبيق على جوالك للوصول السريع والعمل بدون إنترنت</p>
+                </div>
+            </div>
+            <button id="install-button" type="button" style="width: 100%; padding: 12px; background-color: #22c55e; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 15px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+                📥 تثبيت التطبيق الآن
+            </button>
+        </div>
+
+        <script>
+          let deferredPrompt;
+          const installContainer = document.getElementById('install-container');
+          const installButton = document.getElementById('install-button');
+
+          window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            installContainer.style.display = 'block';
+          });
+
+          installButton.addEventListener('click', () => {
+            if (deferredPrompt) {
+              deferredPrompt.prompt();
+              deferredPrompt.userChoice.then(() => {
+                installContainer.style.display = 'none';
+                deferredPrompt = null;
+              });
+            }
+          });
+        </script>
+
+        <!-- تسجيل Service Worker للعمل بدون إنترنت -->
+        <script>
+          if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+              navigator.serviceWorker.register('sw.js').then(() => {
+                console.log('Service Worker registered - التطبيق يعمل بدون إنترنت');
+              }).catch(err => {
+                console.log('SW registration failed:', err);
+              });
+            });
+          }
+        </script>
+
+        <div class="auth-card" id="login-form-container">
+            <h2 data-i18n="login_title">تسجيل الدخول إلى النظام</h2>
+            <div class="form-group">
+                <label data-i18n="email_label">البريد الإلكتروني:</label>
+                <input type="email" id="login-email" placeholder="example@domain.com" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label data-i18n="pass_label">كلمة المرور:</label>
+                <input type="password" id="login-password" placeholder="********">
+            </div>
+            <button class="btn-main" onclick="handleLogin()" data-i18n="login_btn">تسجيل الدخول</button>
+            <div style="text-align: center; margin-top: 12px; font-size: 12px;">
+                <span data-i18n="no_account">ليس لديك حساب؟</span> 
+                <a href="#" onclick="toggleAuthView('register')" style="color: #2980b9; font-weight: bold; text-decoration: none;" data-i18n="create_account">إنشاء حساب جديد</a>
+            </div>
+        </div>
+
+        <div class="auth-card" id="register-form-container" style="display: none;">
+            <h2 data-i18n="reg_title">إنشاء حساب جديد</h2>
+            <div class="form-group">
+                <label data-i18n="shop_name_label">اسم المحل / النشاط:</label>
+                <input type="text" id="reg-name" placeholder="اسم المحل التجاري" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label data-i18n="phone_label">رقم الجوال:</label>
+                <input type="text" id="reg-phone" placeholder="055xxxxxxx" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label data-i18n="email_label">البريد الإلكتروني:</label>
+                <input type="email" id="reg-email" placeholder="example@domain.com" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label data-i18n="pass_label">كلمة المرور:</label>
+                <input type="password" id="reg-password" placeholder="أدخل كلمة مرور قوية">
+            </div>
+            <button class="btn-main" style="background: #2980b9;" onclick="handleRegister()" data-i18n="reg_btn">إنشاء الحساب الآن</button>
+            <div style="text-align: center; margin-top: 12px; font-size: 12px;">
+                <span data-i18n="has_account">لديك حساب بالفعل؟</span> 
+                <a href="#" onclick="toggleAuthView('login')" style="color: #1e3c72; font-weight: bold; text-decoration: none;" data-i18n="login_btn">تسجيل الدخول</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- نافذة قراءة الباركود الحقيقية للكاميرا -->
+    <div id="barcode-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:999999; flex-direction:column; justify-content:center; align-items:center;">
+        <div style="color: white; margin-bottom: 10px; font-weight: bold; font-size: 15px; text-align:center;">📷 وجه الكاميرا مباشرة نحو باركود المنتج</div>
+        <div id="reader" style="width: 320px; background: #fff; border-radius:8px; overflow:hidden;"></div>
+        <button onclick="stopBarcodeScanner()" style="margin-top: 15px; background: #c0392b; color: white; border: none; padding: 10px 22px; border-radius: 6px; font-weight: bold; cursor: pointer;">إغلاق الكاميرا ✖</button>
+    </div>
+
+    <!-- نافذة معاينة الفاتورة والمستندات قبل الطباعة -->
+    <div id="preview-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:999998; justify-content:center; align-items:center;">
+        <div style="background:#fff; width:90%; max-width:550px; max-height:85vh; border-radius:10px; padding:20px; overflow-y:auto; position:relative;">
+            <h3 style="margin-top:0; color:#1e3c72; border-bottom:1px solid #ccc; padding-bottom:8px;">🔍 معاينة الفاتورة والمستند</h3>
+            <div id="preview-modal-content" style="padding:10px; border:1px solid #eee; border-radius:6px; background:#fff;"></div>
+            <div style="display:flex; gap:10px; margin-top:15px;">
+                <button onclick="printInvoiceFromPreview()" style="flex:1; background:#27ae60; color:#fff; border:none; padding:10px; border-radius:6px; font-weight:bold; cursor:pointer;">🖨️ طباعة الآن</button>
+                <button onclick="saveInvoiceAsPDF()" style="flex:1; background:#9b59b6; color:#fff; border:none; padding:10px; border-radius:6px; font-weight:bold; cursor:pointer;">💾 حفظ PDF</button>
+                <button onclick="closePreviewModal()" style="flex:1; background:#7f8c8d; color:#fff; border:none; padding:10px; border-radius:6px; font-weight:bold; cursor:pointer;">إغلاق المعاينة ✖</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- نافذة شرح التطبيق (صور توضيحية) -->
+    <div id="tutorial-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:999999; flex-direction:column; justify-content:center; align-items:center;">
+        <div style="background:#fff; width:92%; max-width:650px; max-height:88vh; border-radius:12px; padding:20px; overflow-y:auto; position:relative;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:2px solid #1e3c72; padding-bottom:10px;">
+                <h3 style="margin:0; color:#1e3c72; font-size:18px;">📖 شرح طريقة استخدام التطبيق من البداية للنهاية</h3>
+                <button onclick="closeTutorialModal()" style="background:#c0392b; color:#fff; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-weight:bold;">إغلاق ✖</button>
+            </div>
+            <div id="tutorial-content" style="text-align:center;"></div>
+            <div style="display:flex; gap:10px; margin-top:15px; justify-content:center;">
+                <button onclick="tutorialPrev()" id="tutorial-prev-btn" style="background:#7f8c8d; color:#fff; border:none; padding:10px 20px; border-radius:6px; font-weight:bold; cursor:pointer;">← السابق</button>
+                <span id="tutorial-counter" style="padding:10px 15px; background:#eef2f7; border-radius:6px; font-weight:bold; color:#1e3c72;">1 / 1</span>
+                <button onclick="tutorialNext()" id="tutorial-next-btn" style="background:#1e3c72; color:#fff; border:none; padding:10px 20px; border-radius:6px; font-weight:bold; cursor:pointer;">التالي →</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- نافذة الإعدادات -->
+    <div id="settings-modal">
+        <div class="modal-card">
+            <h3 data-i18n="settings_title">إعدادات المحل وترويسة الفاتورة</h3>
+            <div class="form-group">
+                <label data-i18n="change_lang">تغيير لغة التطبيق / Language:</label>
+                <button type="button" class="btn-main" style="background:#8e44ad; margin-top:2px;" onclick="toggleLanguage()">العربية / English 🌐</button>
+            </div>
+            <div class="form-group">
+                <label data-i18n="shop_name_label">اسم المحل التجاري:</label>
+                <input type="text" id="setting-shop-name" value="نظام محاسبي قافلة الصحراء">
+            </div>
+            <div class="form-group">
+                <label data-i18n="address_label">عنوان المحل:</label>
+                <input type="text" id="setting-shop-address" placeholder="العنوان">
+            </div>
+            <div class="form-group">
+                <label data-i18n="phone_label">رقم الهاتف:</label>
+                <input type="text" id="setting-shop-phone" placeholder="770000000">
+            </div>
+            <div class="form-group">
+                <label data-i18n="footer_label">ملاحظة أسفل الفاتورة:</label>
+                <input type="text" id="setting-invoice-footer" value="شكراً لتعاملكم معنا">
+            </div>
+            <div class="form-group">
+                <label data-i18n="custom_logo_label">شعار الفاتورة المخصص (يتغير فقط في الفاتورة):</label>
+                <input type="file" id="setting-logo-file" accept="image/*" onchange="encodeImageFileAsURL(this)" style="margin-bottom:6px;">
+                <div id="logo-preview-box" style="margin-top:6px; text-align:center;"></div>
+            </div>
+            <div class="form-group">
+                <label>تشكيل فاتورة المبيعات (اختر الشكل):</label>
+                <select id="setting-invoice-style" style="padding:6px; border:1px solid #ccc; border-radius:5px; font-size:12px;">
+                    <option value="1">۱ - التصميم الكلاسيكي (مركزي أزرق)</option>
+                    <option value="2">۲ - تصميم الجزلة (رأس صحراوي ذهبي)</option>
+                    <option value="3">۳ - تصميم المربعات (بطاقات ملونة)</option>
+                    <option value="4">۴ - تصميم الصحراء (رملي أردافيخي فخم)</option>
+                </select>
+            </div>
+
+            <hr style="margin: 15px 0; border: 0; border-top: 1px solid #ddd;">
+            <div style="display:flex; justify-content: space-between; align-items:center; margin-bottom: 10px;">
+                <h4 style="font-size: 13px; color: #1e3c72; margin: 0;" data-i18n="backup_restore">نسخ واسترجاع البيانات</h4>
+                <button type="button" onclick="logoutAccount()" style="background:#c0392b; color:#fff; border:none; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:bold; cursor:pointer;" data-i18n="logout">تسجيل الخروج 🚪</button>
+            </div>
+            
+            <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                <button type="button" class="btn-main" style="background: #2980b9; margin-top: 0; font-size: 12px;" onclick="exportDataToFlash()" data-i18n="export_btn">💾 تصدير نسخة احتياطية</button>
+            </div>
+
+            <div class="form-group">
+                <label data-i18n="import_label">استرجاع بيانات (من ملفات JSON, TXT, BIN):</label>
+                <input type="file" id="import-file-input" accept=".json, .txt, .bin" style="margin-bottom: 6px;" onchange="importDataFromFlash(this)">
+            </div>
+
+            <div style="display:flex; gap:6px; margin-top:15px;">
+                <button class="btn-main" style="background:#27ae60; margin-top:0;" onclick="saveSettings()" data-i18n="save_btn">حفظ والتعديلات</button>
+                <button class="btn-main" style="background:#7f8c8d; margin-top:0;" onclick="closeSettingsModal()" data-i18n="cancel_btn">إلغاء</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- التطبيق الرئيسي -->
+    <div id="main-app" class="screen">
+        <header>
+            <div class="logo-area">
+                <img id="fixed-app-logo" class="header-logo-img" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M10 20 h15 l15 40 h40 l10 -30 h-55' fill='none' stroke='%231e3c72' stroke-width='8'/><circle cx='45' cy='75' r='8' fill='%231e3c72'/><circle cx='75' cy='75' r='8' fill='%231e3c72'/></svg>" alt="شعار">
+                <h3 id="shop-title-header">نظام محاسبي قافلة الصحراء</h3>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;">
+                <button class="settings-btn" onclick="openSettingsModal()" data-i18n="settings_btn">⚙️ الإعدادات</button>
+                <select id="printer-mode" style="padding:4px; font-size:11px; border-radius:4px; border:none;">
+                    <option value="thermal">حراري صغير</option>
+                    <option value="normal" selected>عادي A4</option>
+                </select>
+            </div>
+        </header>
+
+        <!-- شريط التبويبات الرئيسي Navigation -->
+        <nav class="nav-tabs" style="display:flex; overflow-x:auto; background:#1e3c72; padding:5px; gap:4px;">
+            <button class="nav-btn active" onclick="switchTab('cashier', this)" data-i18n="nav_cashier">🛒 الكاشير</button>
+            <button class="nav-btn" onclick="switchTab('purchases', this)" data-i18n="nav_purchases">🛍️ المشتريات</button>
+            <button class="nav-btn" onclick="switchTab('receipt-vouch', this)" data-i18n="nav_receipt">💵 سند قبض</button>
+            <button class="nav-btn" onclick="switchTab('payment-vouch', this)" data-i18n="nav_payment">💸 سند صرف</button>
+            <button class="nav-btn" onclick="switchTab('debts', this)" data-i18n="nav_debts">📒 الديون</button>
+            <button class="nav-btn" onclick="switchTab('inventory', this)" data-i18n="nav_inventory">📦 المخزن</button>
+            <button class="nav-btn" onclick="switchTab('expiry', this)" data-i18n="nav_expiry">📅 الصلاحية</button>
+            <button class="nav-btn" onclick="switchTab('profits', this)" data-i18n="nav_profits">📈 الأرباح</button>
+            <button class="nav-btn" onclick="openTutorialModal()" style="background:#2a5298; color:#fff;">📖 شرح التطبيق</button>
+            <button class="nav-btn" id="admin-tab-btn" style="display:none;" onclick="switchTab('admin-panel', this)" data-i18n="nav_admin">👤 صفحة المدير</button>
+        </nav>
+
+        <div class="container">
+            <!-- تبويب الكاشير والمبيعات -->
+            <div id="tab-cashier" class="tab-pane active">
+                <div class="grid-2">
+                    <div class="card">
+                        <div style="display:flex; gap:6px; margin-bottom:8px;">
+                            <input type="text" id="search-box" data-i18n-ph="ph_search" placeholder="ابحث باسم المنتج أو الباركود..." oninput="renderPosProducts()" onkeydown="if(event.key==='Enter'){handleBarcodeEnter();}" style="flex:1; padding:8px; border:1px solid #ccc; border-radius:6px; font-size:12px;" autocomplete="off">
+                            <button onclick="startBarcodeScanner('search-box')" style="background:#8e44ad; color:#fff; border:none; padding:6px 12px; border-radius:6px; cursor:pointer; font-size:12px; font-weight:bold; display:flex; align-items:center; gap:4px;">📷 ماسح باركود</button>
+                        </div>
+                        <div id="pos-products-grid" class="products-grid"></div>
+                    </div>
+                    
+                    <div class="card">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; background:#f4f6f9; padding:5px 8px; border-radius:5px;">
+                            <div style="display:flex; align-items:center; gap:4px;">
+                                <button onclick="navigateInvoice(-1)" style="background:#1e3c72; color:#fff; border:none; padding:3px 8px; border-radius:4px; cursor:pointer; font-weight:bold;">◀</button>
+                                <span id="inv-number-display" style="color:#e67e22; font-weight:bold; font-size:12px;">فاتورة رقم: 1</span>
+                                <button onclick="navigateInvoice(1)" style="background:#1e3c72; color:#fff; border:none; padding:3px 8px; border-radius:4px; cursor:pointer; font-weight:bold;">▶</button>
+                            </div>
+                            <button onclick="createNewCustomerAccount()" style="background:#27ae60; color:#fff; border:none; padding:4px 10px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:bold;" data-i18n="cashier_new_invoice">+ عميل وفاتورة جديدة</button>
+                        </div>
+
+                        <div style="display:grid; grid-template-columns: 1fr; gap:6px; margin-bottom:6px;">
+                            <input type="text" id="cust-name" data-i18n-ph="ph_cust_name" placeholder="اسم العميل" autocomplete="off" oninput="saveCurrentInvoiceState()" style="padding:6px; font-size:11px; border:1px solid #ccc; border-radius:5px;">
+                        </div>
+                        <div style="margin-bottom:6px;">
+                            <input type="text" id="cust-phone" data-i18n-ph="ph_cust_phone" placeholder="رقم الهاتف" autocomplete="off" oninput="saveCurrentInvoiceState()" style="width:100%; padding:6px; font-size:11px; border:1px solid #ccc; border-radius:5px;">
+                        </div>
+
+                        <div id="invoice-items-list" class="invoice-box">لا توجد منتجات بالفاتورة</div>
+                        
+                        <div class="form-group" style="margin-bottom:6px;">
+                            <label style="font-weight:bold; font-size:11px;" data-i18n="discount_label">الخصم:</label>
+                            <div style="display:flex; gap:6px;">
+                                <div style="flex:1; position:relative;">
+                                    <input type="number" step="any" id="inv-discount" value="0" data-i18n-ph="ph_discount" oninput="renderInvoiceItems(); saveCurrentInvoiceState();" placeholder="قيمة الخصم" style="padding:5px; border:1px solid #ccc; border-radius:4px; font-size:11px;">
+                                </div>
+                                <select id="discount-curr" onchange="renderInvoiceItems(); saveCurrentInvoiceState();" style="padding:5px; border:1px solid #ccc; border-radius:4px; font-size:11px;">
+                                    <option value="ريال يمني">ريال يمني</option>
+                                    <option value="ريال سعودي">ريال سعودي</option>
+                                    <option value="ريال عماني">ريال عماني</option>
+                                    <option value="دولار أمريكي">دولار أمريكي</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div style="font-weight:bold; font-size:11px; margin-bottom:8px; line-height: 1.5; text-align:left; color:#1e3c72; background:#f4f6f9; padding:6px; border-radius:5px;">
+                            <div id="inv-subtotal">الإجمالي قبل الخصم: 0</div>
+                            <div id="inv-discount-val" style="color:#c0392b;">قيمة الخصم: 0</div>
+                            <div id="inv-totals-container" style="border-top:1px dashed #ccc; margin-top:4px; padding-top:4px;">الإجمالي بعد الخصم: 0</div>
+                        </div>
+                        
+                        <div class="actions-grid">
+                            <button style="background:#27ae60;" onclick="checkout('نقدي')" data-i18n="btn_cash">نقد</button>
+                            <button style="background:#2980b9;" onclick="checkout('شبكة')" data-i18n="btn_card">شبكة</button>
+                            <button style="background:#e67e22;" onclick="checkout('آجل')" data-i18n="btn_debt">آجل</button>
+                            <button style="background:#8e44ad;" onclick="makeQuotation()" data-i18n="btn_quote">عرض سعر</button>
+                            <button style="background:#34495e;" onclick="previewInvoice()">👁️ معاينة</button>
+                            <button style="background:#16a085;" onclick="printInvoiceDirect()" data-i18n="btn_print">طباعة</button>
+                            <button style="background:#9b59b6;" onclick="printInvoiceDirectPDF()" data-i18n="btn_pdf">حفظ PDF</button>
+                            <button style="background:#c0392b;" onclick="clearInvoice()" data-i18n="btn_clear">مسح</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- تبويب المشتريات -->
+            <div id="tab-purchases" class="tab-pane" style="display:none;">
+                <div class="card">
+                    <h4 style="margin-bottom:8px; color:#8e44ad;" data-i18n="purch_title">تسجيل المشتريات</h4>
+                    <div class="form-group"><label data-i18n="purch_name_lbl">اسم المشتريات / البيان:</label><input type="text" id="purch-name" placeholder="أدخل اسم البضاعة" autocomplete="off"></div>
+                    <div class="form-group">
+                        <label data-i18n="purch_amount_lbl">المبلغ والعملة:</label>
+                        <div style="display: flex; gap: 6px;">
+                            <input type="number" step="any" id="purch-amount" placeholder="أدخل المبلغ" style="flex: 2;">
+                            <select id="purch-curr" style="flex: 1;">
+                                <option value="ريال يمني">ريال يمني</option>
+                                <option value="ريال سعودي">ريال سعودي</option>
+                                <option value="ريال عماني">ريال عماني</option>
+                                <option value="دولار أمريكي">دولار أمريكي</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label data-i18n="purch_method_lbl">طريقة الشراء:</label>
+                        <select id="purch-method" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;">
+                            <option value="نقد">💵 نقد (خصم فوري من الأرباح)</option>
+                            <option value="آجل">📋 آجل (تسجيل دين باسم الغرض)</option>
+                        </select>
+                    </div>
+                    <div style="display:flex; gap:6px; flex-wrap: wrap;">
+                        <button class="btn-main" style="background:#8e44ad; flex:1;" onclick="savePurchaseRecord()" data-i18n="purch_save_btn">حفظ وتخصيم المشتريات</button>
+                        <button class="btn-main" style="background:#c0392b; flex:1;" onclick="clearPurchaseFields()" data-i18n="purch_clear_btn">تفريغ</button>
+                    </div>
+
+                    <hr style="margin:15px 0; border:none; border-top:2px dashed #8e44ad;">
+
+                    <h4 style="margin-bottom:8px; color:#c0392b;">💰 سند صرف المشتريات (تسديد دين شراء آجل)</h4>
+                    <div class="form-group">
+                        <label>اختر الغرض (دين شراء آجل):</label>
+                        <select id="purch-pay-debt-select" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:6px;">
+                            <option value="">-- اختر الغرض --</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>المبلغ المسدد والعملة:</label>
+                        <div style="display: flex; gap: 6px;">
+                            <input type="number" step="any" id="purch-pay-amount" placeholder="المبلغ المسدد" style="flex: 2;">
+                            <select id="purch-pay-curr" style="flex: 1;">
+                                <option value="ريال يمني">ريال يمني</option>
+                                <option value="ريال سعودي">ريال سعودي</option>
+                                <option value="ريال عماني">ريال عماني</option>
+                                <option value="دولار أمريكي">دولار أمريكي</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:6px; flex-wrap: wrap;">
+                        <button class="btn-main" style="background:#c0392b; flex:1;" onclick="savePurchasePaymentVoucher()">💸 تسديد وخصم من الأرباح</button>
+                        <button class="btn-main" style="background:#7f8c8d; flex:1;" onclick="clearPurchasePaymentFields()">تفريغ</button>
+                    </div>
+
+                    <h4 style="margin-top:15px; margin-bottom:8px; color:#1e3c72; font-size:13px;" data-i18n="purch_table_title">سجلات المشتريات المسجلة</h4>
+                    <div style="overflow-x:auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>اسم / بيان المشتريات</th>
+                                    <th>المبلغ</th>
+                                    <th>العملة</th>
+                                    <th>طريقة الشراء</th>
+                                    <th>الدين المتبقي</th>
+                                    <th>التاريخ</th>
+                                    <th>إجراء</th>
+                                </tr>
+                            </thead>
+                            <tbody id="purchases-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- تبويب سند القبض وتصحيح نظام التقصيد وحساب الأرباح -->
+            <div id="tab-receipt-vouch" class="tab-pane" style="display:none;">
+                <div class="card">
+                    <h4 style="margin-bottom:8px; color:#1e3c72;" data-i18n="rec_title">سند قبض نقدي (تقصيد الديون)</h4>
+                    <div class="form-group"><label data-i18n="cust_name_lbl">اسم العميل:</label><input type="text" id="vouch-name" placeholder="أدخل اسم العميل" autocomplete="off"></div>
+                    <div class="form-group"><label data-i18n="phone_lbl">رقم الهاتف:</label><input type="text" id="vouch-phone" placeholder="967xxxxxxxxx" autocomplete="off"></div>
+                    <div class="form-group">
+                        <label data-i18n="amount_curr_lbl">مبلغ الدفعة والعملة:</label>
+                        <div style="display: flex; gap: 6px;">
+                            <input type="number" step="any" id="vouch-amount" placeholder="أدخل مبلغ الدفعة" style="flex: 2;">
+                            <select id="vouch-curr" style="flex: 1;">
+                                <option value="ريال يمني">ريال يمني</option>
+                                <option value="ريال سعودي">ريال سعودي</option>
+                                <option value="ريال عماني">ريال عماني</option>
+                                <option value="دولار أمريكي">دولار أمريكي</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:6px; flex-wrap: wrap;">
+                        <button class="btn-main" style="background:#27ae60; flex:1;" onclick="saveReceiptVoucher()" data-i18n="rec_save_btn">حفظ سند القبض وترحيل الأرباح</button>
+                        <button class="btn-main" style="background:#34495e; flex:1;" onclick="previewVoucher()">👁️ معاينة الفاتورة</button>
+                        <button class="btn-main" style="background:#16a085; flex:1;" onclick="printVoucher()" data-i18n="btn_print">طباعة</button>
+                        <button class="btn-main" style="background:#9b59b6; flex:1;" onclick="printVoucherPDF()" data-i18n="btn_pdf">حفظ PDF</button>
+                        <button class="btn-main" style="background:#c0392b; flex:1;" onclick="clearVoucherFields()" data-i18n="purch_clear_btn">تفريغ</button>
+                    </div>
+
+                    <h4 style="margin-top:15px; margin-bottom:8px; color:#1e3c72; font-size:13px;" data-i18n="rec_table_title">سجلات سندات القبض</h4>
+                    <div style="overflow-x:auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th data-i18n="th_customer">العميل</th>
+                                    <th data-i18n="phone_lbl">الهاتف</th>
+                                    <th data-i18n="th_cost">المبلغ</th>
+                                    <th data-i18n="th_curr">العملة</th>
+                                    <th data-i18n="th_date">التاريخ</th>
+                                    <th data-i18n="th_action">إجراء</th>
+                                </tr>
+                            </thead>
+                            <tbody id="vouchers-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- تبويب سند الصرف -->
+            <div id="tab-payment-vouch" class="tab-pane" style="display:none;">
+                <div class="card">
+                    <h4 style="margin-bottom:8px; color:#c0392b;" data-i18n="pay_title">سند صرف نقدي</h4>
+                    <div class="form-group"><label data-i18n="benef_lbl">اسم المستفيد:</label><input type="text" id="pay-vouch-name" placeholder="أدخل الاسم" autocomplete="off"></div>
+                    <div class="form-group"><label data-i18n="phone_lbl">رقم الهاتف:</label><input type="text" id="pay-vouch-phone" placeholder="967xxxxxxxxx" autocomplete="off"></div>
+                    <div class="form-group">
+                        <label data-i18n="amount_curr_lbl">المبلغ والعملة:</label>
+                        <div style="display: flex; gap: 6px;">
+                            <input type="number" step="any" id="pay-vouch-amount" placeholder="أدخل المبلغ" style="flex: 2;">
+                            <select id="pay-vouch-curr" style="flex: 1;">
+                                <option value="ريال يمني">ريال يمني</option>
+                                <option value="ريال سعودي">ريال سعودي</option>
+                                <option value="ريال عماني">ريال عماني</option>
+                                <option value="دولار أمريكي">دولار أمريكي</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:6px; flex-wrap: wrap;">
+                        <button class="btn-main" style="background:#c0392b; flex:1;" onclick="savePaymentVoucher()" data-i18n="pay_save_btn">حفظ سند الصرف</button>
+                        <button class="btn-main" style="background:#34495e; flex:1;" onclick="previewPaymentVoucher()">👁️ معاينة الفاتورة</button>
+                        <button class="btn-main" style="background:#16a085; flex:1;" onclick="printPaymentVoucher()" data-i18n="btn_print">طباعة</button>
+                        <button class="btn-main" style="background:#9b59b6; flex:1;" onclick="printPaymentVoucherPDF()" data-i18n="btn_pdf">حفظ PDF</button>
+                        <button class="btn-main" style="background:#7f8c8d; flex:1;" onclick="clearPaymentVoucherFields()" data-i18n="purch_clear_btn">تفريغ</button>
+                    </div>
+
+                    <h4 style="margin-top:15px; margin-bottom:8px; color:#1e3c72; font-size:13px;" data-i18n="pay_table_title">سجلات سندات الصرف</h4>
+                    <div style="overflow-x:auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th data-i18n="benef_lbl">المستفيد</th>
+                                    <th data-i18n="th_cost">المبلغ</th>
+                                    <th data-i18n="th_curr">العملة</th>
+                                    <th data-i18n="th_date">التاريخ</th>
+                                    <th data-i18n="th_action">إجراء</th>
+                                </tr>
+                            </thead>
+                            <tbody id="payment-vouchers-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- تبويب الديون -->
+            <div id="tab-debts" class="tab-pane" style="display:none;">
+                <div class="card">
+                    <h4 style="margin-bottom:8px; color:#e67e22;" data-i18n="debts_title">تسجيل ديون العملاء والآجل</h4>
+                    <div class="form-group"><label data-i18n="debtor_lbl">اسم المدين:</label><input type="text" id="debt-name" placeholder="اسم العميل" autocomplete="off"></div>
+                    <div class="form-group"><label data-i18n="phone_lbl">رقم الهاتف:</label><input type="text" id="debt-phone" placeholder="967xxxxxxxxx" autocomplete="off"></div>
+                    <div class="form-group">
+                        <label data-i18n="debt_val_lbl">قيمة الدين والعملة:</label>
+                        <div style="display: flex; gap: 6px;">
+                            <input type="number" step="any" id="debt-amount" placeholder="قيمة الدين" style="flex: 2;">
+                            <select id="debt-curr" style="flex: 1;">
+                                <option value="ريال يمني">ريال يمني</option>
+                                <option value="ريال سعودي">ريال سعودي</option>
+                                <option value="ريال عماني">ريال عماني</option>
+                                <option value="دولار أمريكي">دولار أمريكي</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:6px; flex-wrap: wrap;">
+                        <button class="btn-main" style="background:#e67e22; flex:1;" onclick="saveDebtRecord()" data-i18n="debt_save_btn">حفظ الدين</button>
+                        <button class="btn-main" style="background:#34495e; flex:1;" onclick="previewDebt()">👁️ معاينة</button>
+                        <button class="btn-main" style="background:#16a085; flex:1;" onclick="printDebt()" data-i18n="btn_print">طباعة</button>
+                        <button class="btn-main" style="background:#9b59b6; flex:1;" onclick="printDebtPDF()" data-i18n="btn_pdf">حفظ PDF</button>
+                        <button class="btn-main" style="background:#c0392b; flex:1;" onclick="clearDebtFields()" data-i18n="purch_clear_btn">تفريغ</button>
+                    </div>
+
+                    <div style="margin-top:10px; font-weight:bold; color:#d35400;" id="total-debts-box">إجمالي الديون والآجل: 0</div>
+
+                    <h4 style="margin-top:15px; margin-bottom:8px; color:#1e3c72; font-size:13px;" data-i18n="debt_table_title">جدول فواتير الديون والآجل</h4>
+                    <div style="overflow-x:auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th data-i18n="th_inv_num">رقم الفاتورة</th>
+                                    <th data-i18n="th_customer">اسم العميل</th>
+                                    <th data-i18n="th_total_curr">المتبقي بالعملات</th>
+                                    <th data-i18n="th_date">التاريخ</th>
+                                    <th data-i18n="th_actions">إجراءات</th>
+                                </tr>
+                            </thead>
+                            <tbody id="debts-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- تبويب المخزن -->
+            <div id="tab-inventory" class="tab-pane" style="display:none;">
+                <div class="card">
+                    <h4 style="margin-bottom:8px; color:#16a085;" data-i18n="inv_title">إدارة المخزن والمنتجات</h4>
+                    <div class="grid-2" style="gap:10px;">
+                        <div class="form-group"><label data-i18n="p_name_lbl">اسم المنتج الجديد:</label><input type="text" id="new-p-name" placeholder="اسم المنتج" autocomplete="off"></div>
+                        <div class="form-group">
+                            <label data-i18n="p_barcode_lbl">رقم الباركود:</label>
+                            <div style="display:flex; gap:4px;">
+                                <input type="text" id="new-p-barcode" placeholder="الباركود" autocomplete="off" style="flex:1;">
+                                <button type="button" onclick="startBarcodeScanner('new-p-barcode')" style="background:#8e44ad; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:11px;">📷 ماسح</button>
+                            </div>
+                        </div>
+                        <div class="form-group" style="grid-column: 1 / -1;">
+                            <label>صورة المنتج (اختياري — اختر من المعرض):</label>
+                            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                                <input type="file" id="new-p-image" accept="image/*" onchange="previewNewProductImage(this)" style="flex:1; min-width:140px; padding:5px; border:1px solid #ccc; border-radius:5px; font-size:12px;">
+                                <button type="button" onclick="captureProductImage()" style="background:#16a085; color:#fff; border:none; padding:7px 12px; border-radius:5px; cursor:pointer; font-size:12px; font-weight:bold;">📷 التقاط من الكاميرا</button>
+                                <button type="button" onclick="clearNewProductImage()" style="background:#c0392b; color:#fff; border:none; padding:7px 12px; border-radius:5px; cursor:pointer; font-size:12px; font-weight:bold;">✖ إزالة</button>
+                            </div>
+                            <div id="new-p-image-preview" style="margin-top:6px;"></div>
+                        </div>
+                        <div class="form-group"><label data-i18n="p_buy_lbl">سعر الشراء:</label><input type="number" step="any" id="new-p-buy" placeholder="0"></div>
+                        <div class="form-group"><label data-i18n="p_price_lbl">سعر البيع:</label><input type="number" step="any" id="new-p-price" placeholder="0"></div>
+                        <div class="form-group"><label data-i18n="p_qty_lbl">الكمية المتوفرة:</label><input type="number" step="any" id="new-p-qty" placeholder="0"></div>
+                        <div class="form-group">
+                            <label data-i18n="p_curr_lbl">العملة:</label>
+                            <select id="new-p-curr">
+                                <option value="ريال يمني">ريال يمني</option>
+                                <option value="ريال سعودي">ريال سعودي</option>
+                                <option value="ريال عماني">ريال عماني</option>
+                                <option value="دولار أمريكي">دولار أمريكي</option>
+                            </select>
+                        </div>
+                        <div class="form-group"><label data-i18n="p_prod_lbl">تاريخ الإنتاج:</label><input type="date" id="new-p-prod-date"></div>
+                        <div class="form-group"><label data-i18n="p_exp_lbl">تاريخ الانتهاء:</label><input type="date" id="new-p-exp-date"></div>
+                    </div>
+                    <button class="btn-main" style="background:#16a085; margin-top:10px;" onclick="addNewProduct()" data-i18n="p_add_btn">إضافة للمخزن</button>
+
+                    <h4 style="margin-top:20px; margin-bottom:8px; color:#1e3c72; font-size:13px;" data-i18n="p_table_title">قائمة منتجات المخزن</h4>
+                    <div style="overflow-x:auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>الصورة</th>
+                                    <th data-i18n="th_product">المنتج</th>
+                                    <th data-i18n="th_barcode">الباركود</th>
+                                    <th data-i18n="th_buy">شراء</th>
+                                    <th data-i18n="th_sell">بيع</th>
+                                    <th data-i18n="th_qty">الكمية</th>
+                                    <th data-i18n="th_curr">العملة</th>
+                                    <th data-i18n="th_action">إجراء</th>
+                                </tr>
+                            </thead>
+                            <tbody id="inventory-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- تبويب الصلاحية -->
+            <div id="tab-expiry" class="tab-pane" style="display:none;">
+                <div class="card">
+                    <h4 style="margin-bottom:8px; color:#c0392b;" data-i18n="exp_title">تاريخ وصلاحية المنتجات (تتبع صلاحية المخزن)</h4>
+                    <div style="overflow-x:auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th data-i18n="th_product">المنتج</th>
+                                    <th data-i18n="th_qty">الكمية</th>
+                                    <th data-i18n="th_buy">سعر الشراء</th>
+                                    <th data-i18n="th_sell">سعر البيع</th>
+                                    <th data-i18n="th_exp_date">تاريخ الانتهاء</th>
+                                    <th data-i18n="th_exp_status">الحالة</th>
+                                </tr>
+                            </thead>
+                            <tbody id="expiry-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- تبويب الأرباح -->
+            <div id="tab-profits" class="tab-pane" style="display:none;">
+                <div class="card">
+                    <h4 style="margin-bottom:12px; color:#27ae60;" data-i18n="prof_title">صفحة وتقرير الأرباح والعجز</h4>
+                    
+                    <div style="margin-bottom:15px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                        <button onclick="printDailyReport()" style="background:#1e3c72; color:#fff; border:none; padding:10px 18px; border-radius:6px; font-size:13px; font-weight:bold; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,0.15);" data-i18n="btn_daily_report">🖨️ طباعة تقرير اليوم كله</button>
+                        <span id="daily-report-info" style="font-size:12px; color:#7f8c8d;"></span>
+                    </div>
+                    
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px; margin-bottom:15px;">
+                        <div style="background:#e8f8f5; border:1px solid #16a085; padding:10px; border-radius:6px; text-align:center;">
+                            <div style="font-size:11px; color:#16a085; font-weight:bold;" data-i18n="prof_sales_lbl">إجمالي المبيعات المؤكدة</div>
+                            <div id="prof-total-sales" style="font-size:15px; font-weight:bold; color:#2c3e50; margin-top:4px;">0</div>
+                        </div>
+                        <div style="background:#f4f6f9; border:1px solid #7f8c8d; padding:10px; border-radius:6px; text-align:center;">
+                            <div style="font-size:11px; color:#7f8c8d; font-weight:bold;" data-i18n="prof_cost_lbl">إجمالي تكلفة البضاعة</div>
+                            <div id="prof-total-cost" style="font-size:15px; font-weight:bold; color:#2c3e50; margin-top:4px;">0</div>
+                        </div>
+                        <div style="background:#fdf2e9; border:1px solid #e67e22; padding:10px; border-radius:6px; text-align:center;">
+                            <div style="font-size:11px; color:#e67e22; font-weight:bold;" data-i18n="prof_purch_lbl">إجمالي المشتريات</div>
+                            <div id="prof-total-purchases" style="font-size:15px; font-weight:bold; color:#c0392b; margin-top:4px;">0</div>
+                        </div>
+                        <div style="background:#fadbd8; border:1px solid #c0392b; padding:10px; border-radius:6px; text-align:center;">
+                            <div style="font-size:11px; color:#c0392b; font-weight:bold;" data-i18n="prof_exp_lbl">إجمالي سندات الصرف</div>
+                            <div id="prof-total-expenses" style="font-size:15px; font-weight:bold; color:#c0392b; margin-top:4px;">0</div>
+                        </div>
+                        <div style="background:#eafaf1; border:1px solid #27ae60; padding:10px; border-radius:6px; text-align:center;">
+                            <div style="font-size:11px; color:#27ae60; font-weight:bold;" data-i18n="prof_net_lbl">صافي الأرباح النهائي</div>
+                            <div id="prof-total-net" style="font-size:15px; font-weight:bold; color:#27ae60; margin-top:4px;">0</div>
+                        </div>
+                        <!-- تفاصيل أرباح شهر 8 وسنة 2026 -->
+                        <div style="background:#ebf5fb; border:1px solid #2980b9; padding:10px; border-radius:6px; text-align:center;">
+                            <div id="month-profit-title" style="font-size:11px; color:#2980b9; font-weight:bold;">أرباح شهر (8) - تاريخ اليوم: 10/08/2026</div>
+                            <div id="prof-month-net" style="font-size:15px; font-weight:bold; color:#2980b9; margin-top:4px;">0</div>
+                        </div>
+                        <div style="background:#f4ecf7; border:1px solid #8e44ad; padding:10px; border-radius:6px; text-align:center;">
+                            <div id="year-profit-title" style="font-size:11px; color:#8e44ad; font-weight:bold;">أرباح سنة: (2026)</div>
+                            <div id="prof-year-net" style="font-size:15px; font-weight:bold; color:#8e44ad; margin-top:4px;">0</div>
+                        </div>
+                        <div style="background:#fdedec; border:2px solid #e74c3c; padding:10px; border-radius:6px; text-align:center;">
+                            <div id="deficit-box-title" style="font-size:11px; color:#e74c3c; font-weight:bold;">⚠️ مربع العجز (خسارة الشهر)</div>
+                            <div id="prof-deficit-amount" style="font-size:15px; font-weight:bold; color:#e74c3c; margin-top:4px;">0</div>
+                            <div id="deficit-extra-info" style="font-size:10px; color:#c0392b; margin-top:3px;"></div>
+                        </div>
+                    </div>
+
+                    <div id="prof-deficit-box" style="display:none; background:#fdedec; color:#78281f; padding:12px; border-radius:8px; margin-bottom:12px; font-size:12px; border:2px solid #e74c3c; line-height:1.7; box-shadow:0 2px 6px rgba(231,76,60,0.15);"></div>
+
+                    <h4 style="margin-top:15px; margin-bottom:8px; color:#1e3c72; font-size:13px;" data-i18n="prof_details_title">تفاصيل المبيعات والأرباح المسجلة</h4>
+                    <div style="overflow-x:auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th data-i18n="th_inv_num">رقم الفاتورة</th>
+                                    <th data-i18n="th_customer">اسم العميل</th>
+                                    <th data-i18n="th_sales_type">نوع البيع</th>
+                                    <th data-i18n="th_sales">المبيعات</th>
+                                    <th data-i18n="th_cost">التكلفة</th>
+                                    <th data-i18n="th_net_profit">الربح الصافي</th>
+                                    <th data-i18n="th_date">التاريخ</th>
+                                    <th data-i18n="th_action">إجراء</th>
+                                </tr>
+                            </thead>
+                            <tbody id="profits-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- تبويب صفحة المدير -->
+            <div id="tab-admin-panel" class="tab-pane" style="display:none;">
+                <div class="card">
+                    <h4 style="margin-bottom:10px; color:#1e3c72;">👤 لوحة تحكم مدير النظام العام</h4>
+                    <div style="overflow-x:auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>اسم المستخدم / المحل</th>
+                                    <th>رقم الجوال</th>
+                                    <th>البريد الإلكتروني</th>
+                                    <th style="text-align:center;">الإجراءات المتقدمة</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-users-table-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- منطقة الطباعة المخفية -->
+    <div id="printable-invoice" style="display:none;"></div>
+
+    <script>
+    const defaultAppLogoSVG = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><path d='M10 20 h15 l15 40 h40 l10 -30 h-55' fill='none' stroke='%231e3c72' stroke-width='8'/><circle cx='45' cy='75' r='8' fill='%231e3c72'/><circle cx='75' cy='75' r='8' fill='%231e3c72'/></svg>";
+
+    let currentEmail = "";
+    let currentLang = "ar";
+
+    let shopSettings = { 
+        name: "نظام محاسبي قافلة الصحراء", 
+        address: "", 
+        phone: "", 
+        footer: "شكراً لتعاملكم معنا", 
+        customInvoiceLogo: "",
+        invoiceStyle: "1"
+    };
+
+    let products = [];
+    let invoices = [];
+    let currentInvIndex = 0;
+    let completedSalesRecords = [];
+    let debtsRecords = [];
+    let vouchersRecords = [];
+    let paymentVouchersRecords = [];
+    let purchasesRecords = [];
+
+    let activeInputTarget = null;
+    let currentKeypadEl = null;
+    let html5QrCodeScanner = null;
+
+    window.addEventListener('DOMContentLoaded', () => {
+        let activeEmail = localStorage.getItem('desert_active_email');
+        if(activeEmail) {
+            currentEmail = activeEmail;
+            loadUserData();
+            enterApp();
+        }
+    });
+
+    document.addEventListener('focusin', function(e) {
+        if (e.target && e.target.tagName === 'INPUT') {
+            const type = e.target.type;
+            const id = e.target.id || '';
+            const isNumInput = type === 'number' || type === 'tel' || 
+                               id.includes('price') || id.includes('qty') || id.includes('amount') || 
+                               id.includes('discount') || id.includes('phone') || id.includes('buy') ||
+                               e.target.classList.contains('editable-input');
+            if (isNumInput) {
+                showKeypadFor(e.target);
+            } else {
+                closeKeypad();
+            }
+        }
+    });
+
+    function showKeypadFor(input) {
+        closeKeypad();
+        activeInputTarget = input;
+        
+        let keypad = document.createElement('div');
+        keypad.className = 'mini-num-pad';
+        keypad.innerHTML = `
+            <div class="keypad-grid">
+                <button type="button" onclick="keypadInput('7')">7</button>
+                <button type="button" onclick="keypadInput('8')">8</button>
+                <button type="button" onclick="keypadInput('9')">9</button>
+                <button type="button" onclick="keypadInput('4')">4</button>
+                <button type="button" onclick="keypadInput('5')">5</button>
+                <button type="button" onclick="keypadInput('6')">6</button>
+                <button type="button" onclick="keypadInput('1')">1</button>
+                <button type="button" onclick="keypadInput('2')">2</button>
+                <button type="button" onclick="keypadInput('3')">3</button>
+                <button type="button" onclick="keypadInput('.')">.</button>
+                <button type="button" onclick="keypadInput('0')">0</button>
+                <button type="button" onclick="keypadInput('back')">⌫</button>
+                <button type="button" onclick="keypadInput('clear')" style="background:#e74c3c; color:#fff;">C</button>
+                <button type="button" onclick="closeKeypad()" style="grid-column: span 2; background:#27ae60; color:#fff;">تم ✓</button>
+            </div>
+            <div class="keypad-fraction-row">
+                <button type="button" onclick="keypadInput('0.5')" style="background:#eaf2fb; color:#1e3c72;">0.5</button>
+                <button type="button" onclick="keypadInput('0.25')" style="background:#eaf2fb; color:#1e3c72;">0.25</button>
+                <button type="button" onclick="keypadInput('0.15')" style="background:#eaf2fb; color:#1e3c72;">0.15</button>
+                <button type="button" onclick="keypadInput('0.10')" style="background:#eaf2fb; color:#1e3c72;">0.10</button>
+            </div>
+        `;
+        
+        document.body.appendChild(keypad);
+        currentKeypadEl = keypad;
+        
+        let rect = input.getBoundingClientRect();
+        let top = rect.bottom + window.scrollY + 5;
+        let left = rect.left + window.scrollX;
+        
+        if (left + 190 > window.innerWidth) {
+            left = Math.max(10, window.innerWidth - 200);
+        }
+        if (rect.bottom + 230 > window.innerHeight) {
+            top = Math.max(10, rect.top + window.scrollY - 225);
+        }
+        
+        keypad.style.position = 'absolute';
+        keypad.style.top = top + 'px';
+        keypad.style.left = left + 'px';
+        keypad.style.zIndex = '99999';
+    }
+
+    function keypadInput(val) {
+        if(!activeInputTarget) return;
+        if(val === 'back') {
+            activeInputTarget.value = activeInputTarget.value.slice(0, -1);
+        } else if(val === 'clear') {
+            activeInputTarget.value = '';
+        } else {
+            activeInputTarget.value += val;
+        }
+        activeInputTarget.dispatchEvent(new Event('input', { bubbles: true }));
+        activeInputTarget.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    function closeKeypad() {
+        if(currentKeypadEl) {
+            currentKeypadEl.remove();
+            currentKeypadEl = null;
+            activeInputTarget = null;
+        }
+    }
+
+    function handleBodyClick(event) {
+        if(!event.target.closest('input') && !event.target.closest('.mini-num-pad')) {
+            closeKeypad();
+        }
+    }
+
+    function saveUserData() {
+        if(!currentEmail) return;
+        let userData = {
+            shopSettings,
+            products,
+            invoices,
+            completedSalesRecords,
+            debtsRecords,
+            vouchersRecords,
+            paymentVouchersRecords,
+            purchasesRecords
+        };
+        localStorage.setItem('desert_user_data_' + currentEmail, JSON.stringify(userData));
+    }
+
+    function loadUserData() {
+        if(!currentEmail) return;
+        let dataStr = localStorage.getItem('desert_user_data_' + currentEmail);
+        if(dataStr) {
+            try {
+                let data = JSON.parse(dataStr);
+                shopSettings = data.shopSettings || { name: "نظام محاسبي قافلة الصحراء", address:"", phone:"", footer:"شكراً لتعاملكم معنا", customInvoiceLogo:"" };
+                products = data.products || [];
+                invoices = data.invoices || [];
+                completedSalesRecords = data.completedSalesRecords || [];
+                debtsRecords = data.debtsRecords || [];
+                vouchersRecords = data.vouchersRecords || [];
+                paymentVouchersRecords = data.paymentVouchersRecords || [];
+                purchasesRecords = data.purchasesRecords || [];
+            } catch(e) {
+                initDefaultData();
+            }
+        } else {
+            initDefaultData();
+        }
+        
+        if(invoices.length === 0) {
+            invoices.push({ custName: "", custPhone: "", items: [], discount: 0, discountCurr: "ريال يمني", paymentType: "نقدي", date: new Date().toLocaleString('ar-EG') });
+        }
+        currentInvIndex = invoices.length - 1;
+    }
+
+    function initDefaultData() {
+        shopSettings = { 
+            name: "نظام محاسبي قافلة الصحراء", 
+            address: "", 
+            phone: "", 
+            footer: "شكراً لتعاملكم معنا", 
+            customInvoiceLogo: "" 
+        };
+        products = [];
+        invoices = [
+            { custName: "", custPhone: "", items: [], discount: 0, discountCurr: "ريال يمني", paymentType: "نقدي", date: new Date().toLocaleString('ar-EG') }
+        ];
+        completedSalesRecords = [];
+        debtsRecords = [];
+        vouchersRecords = [];
+        paymentVouchersRecords = [];
+        purchasesRecords = [];
+    }
+
+    function exportDataToFlash() {
+        let backupData = { shopSettings, products, invoices, completedSalesRecords, debtsRecords, vouchersRecords, paymentVouchersRecords, purchasesRecords };
+        let dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
+        let downloadAnchor = document.createElement('a');
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", `Desert_Backup_${currentEmail}.json`);
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+        alert(currentLang === 'ar' ? "تم إنشاء وتنزيل ملف النسخة الاحتياطية بنجاح." : "Backup file created and downloaded successfully.");
+    }
+
+    function importDataFromFlash(inputElement) {
+        let file = inputElement.files[0];
+        if (!file) return;
+
+        let reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                let content = e.target.result;
+                let importedData = JSON.parse(content);
+
+                if(importedData.shopSettings) shopSettings = importedData.shopSettings;
+                if(importedData.products) products = importedData.products;
+                if(importedData.invoices) invoices = importedData.invoices;
+                if(importedData.completedSalesRecords) completedSalesRecords = importedData.completedSalesRecords;
+                if(importedData.debtsRecords) debtsRecords = importedData.debtsRecords;
+                if(importedData.vouchersRecords) vouchersRecords = importedData.vouchersRecords;
+                if(importedData.paymentVouchersRecords) paymentVouchersRecords = importedData.paymentVouchersRecords;
+                if(importedData.purchasesRecords) purchasesRecords = importedData.purchasesRecords;
+                
+                saveUserData();
+                updateHeaderAndAppUI();
+                currentInvIndex = invoices.length > 0 ? invoices.length - 1 : 0;
+                renderPosProducts();
+                renderInventoryTable();
+                loadCurrentInvoiceToUI();
+                renderDebtsTable();
+                renderVouchersTable();
+                renderPaymentVouchersTable();
+                renderPurchasesTable();
+                renderExpiryTable();
+                
+                alert(currentLang === 'ar' ? "تم استرجاع البيانات بنجاح!" : "Data restored successfully!");
+                closeSettingsModal();
+            } catch(err) {
+                alert(currentLang === 'ar' ? "خطأ في قراءة ملف النسخة الاحتياطية." : "Error reading backup file.");
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    function openSettingsModal() {
+        closeKeypad();
+        document.getElementById('setting-shop-name').value = shopSettings.name || "نظام محاسبي قافلة الصحراء";
+        document.getElementById('setting-shop-address').value = shopSettings.address || "";
+        document.getElementById('setting-shop-phone').value = shopSettings.phone || "";
+        document.getElementById('setting-invoice-footer').value = shopSettings.footer || "شكراً لتعاملكم معنا";
+        
+        let previewBox = document.getElementById('logo-preview-box');
+        let showLogo = shopSettings.customInvoiceLogo || defaultAppLogoSVG;
+        previewBox.innerHTML = `<img src="${showLogo}" style="max-height:60px; border:1px solid #ccc; padding:2px; border-radius:4px;">`;
+        
+        let styleSel = document.getElementById('setting-invoice-style');
+        if(styleSel) styleSel.value = shopSettings.invoiceStyle || '1';
+        document.getElementById('settings-modal').classList.add('active');
+    }
+
+    function closeSettingsModal() { document.getElementById('settings-modal').classList.remove('active'); }
+
+    let uploadedLogoBase64 = "";
+    function encodeImageFileAsURL(element) {
+        let file = element.files[0];
+        if (file) {
+            let reader = new FileReader();
+            reader.onloadend = function() { 
+                uploadedLogoBase64 = reader.result; 
+                document.getElementById('logo-preview-box').innerHTML = `<img src="${uploadedLogoBase64}" style="max-height:60px; border:1px solid #ccc; padding:2px; border-radius:4px;">`;
+            }
+            reader.readAsDataURL(file);
+        }
+    }
+
+    function saveSettings() {
+        shopSettings.name = document.getElementById('setting-shop-name').value || "نظام محاسبي قافلة الصحراء";
+        shopSettings.address = document.getElementById('setting-shop-address').value || "";
+        shopSettings.phone = document.getElementById('setting-shop-phone').value || "";
+        shopSettings.footer = document.getElementById('setting-invoice-footer').value || "";
+        let styleEl = document.getElementById('setting-invoice-style');
+        if(styleEl) shopSettings.invoiceStyle = styleEl.value || '1';
+        
+        if(uploadedLogoBase64) {
+            shopSettings.customInvoiceLogo = uploadedLogoBase64;
+        }
+        
+        updateHeaderAndAppUI();
+        saveUserData();
+        closeSettingsModal();
+        alert(currentLang === 'ar' ? 'تم حفظ الإعدادات بنجاح.' : 'Settings saved successfully.');
+    }
+
+    function updateHeaderAndAppUI() {
+        // اسم النظام يبقى ثابتاً دائماً ولا يتغير باسم المحل
+        document.getElementById('shop-title-header').innerText = 'نظام محاسبي قافلة الصحراء';
+        let fixedLogo = document.getElementById('fixed-app-logo');
+        fixedLogo.src = defaultAppLogoSVG;
+    }
+
+    function switchTab(tabId, btn) {
+        closeKeypad();
+        document.querySelectorAll('.tab-pane').forEach(el => el.style.display = 'none');
+        document.getElementById('tab-' + tabId).style.display = 'block';
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        if(tabId === 'inventory') renderInventoryTable();
+        else if(tabId === 'profits') renderProfitsReport();
+        else if(tabId === 'debts') renderDebtsTable();
+        else if(tabId === 'receipt-vouch') renderVouchersTable();
+        else if(tabId === 'payment-vouch') renderPaymentVouchersTable();
+        else if(tabId === 'purchases') { renderPurchasesTable(); refreshPurchaseDebtSelect(); }
+        else if(tabId === 'expiry') renderExpiryTable();
+        else if(tabId === 'admin-panel') renderAdminPanel();
+    }
+
+    function toggleAuthView(view) {
+        if(view === 'register') {
+            document.getElementById('login-form-container').style.display = 'none';
+            document.getElementById('register-form-container').style.display = 'block';
+        } else {
+            document.getElementById('register-form-container').style.display = 'none';
+            document.getElementById('login-form-container').style.display = 'block';
+        }
+    }
+
+    function handleRegister() {
+        let name = document.getElementById('reg-name').value.trim();
+        let phone = document.getElementById('reg-phone').value.trim();
+        let email = document.getElementById('reg-email').value.trim().toLowerCase();
+        let password = document.getElementById('reg-password').value;
+        
+        if(!name || !email || !password) {
+            alert(currentLang === 'ar' ? 'الرجاء إدخال جميع الحقول المطلوبة.' : 'Please fill in all required fields.');
+            return;
+        }
+
+        let usersList = JSON.parse(localStorage.getItem('desert_users_db') || '{}');
+        if(usersList[email]) {
+            alert(currentLang === 'ar' ? 'هذا البريد الإلكتروني مسجل مسبقاً!' : 'This email is already registered!');
+            return;
+        }
+
+        usersList[email] = { name, phone: phone || 'لا يوجد', password, status: 'نشط' };
+        localStorage.setItem('desert_users_db', JSON.stringify(usersList));
+
+        currentEmail = email;
+        shopSettings = { name: "نظام محاسبي قافلة الصحراء", address:"", phone:"", footer:"شكراً لتعاملكم معنا", customInvoiceLogo:"" };
+        initDefaultData();
+        saveUserData();
+
+        localStorage.setItem('desert_active_email', currentEmail);
+        alert(currentLang === 'ar' ? 'تم إنشاء الحساب بنجاح وتسجيل الدخول!' : 'Account created and logged in successfully!');
+        enterApp();
+    }
+
+    function handleLogin() {
+        let email = document.getElementById('login-email').value.trim().toLowerCase();
+        let password = document.getElementById('login-password').value;
+
+        if(!email || !password) {
+            alert(currentLang === 'ar' ? 'الرجاء إدخال الإيميل وكلمة المرور.' : 'Please enter email and password.');
+            return;
+        }
+
+        if(email === "a0553804010@gmail.com" && password === "777052026") {
+            currentEmail = email;
+            localStorage.setItem('desert_active_email', currentEmail);
+            loadUserData();
+            enterApp();
+            
+            document.getElementById('admin-tab-btn').style.display = 'inline-block';
+            switchTab('admin-panel', document.getElementById('admin-tab-btn'));
+            alert('مرحباً بك مجدداً أيها المدير العام. تم توجيهك لصفحة التحكم المتقدمة.');
+            return;
+        }
+
+        let usersList = JSON.parse(localStorage.getItem('desert_users_db') || '{}');
+        if(!usersList[email] || usersList[email].password !== password) {
+            alert(currentLang === 'ar' ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة!' : 'Incorrect email or password!');
+            return;
+        }
+
+        if(usersList[email].status === 'محظور' || usersList[email].status === 'مغلق') {
+            alert(currentLang === 'ar' ? 'عذراً، هذا الحساب تم حظره أو تقفيله من قبل مدير النظام.' : 'Sorry, this account has been blocked or closed.');
+            return;
+        }
+
+        currentEmail = email;
+        localStorage.setItem('desert_active_email', currentEmail);
+        loadUserData();
+        enterApp();
+    }
+
+    function renderAdminPanel() {
+        let tbody = document.getElementById('admin-users-table-body');
+        tbody.innerHTML = '';
+
+        let usersList = JSON.parse(localStorage.getItem('desert_users_db') || '{}');
+        let userKeys = Object.keys(usersList);
+
+        if(userKeys.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;">لا يوجد مستخدمون جدد مسجلون حالياً.</td></tr>`;
+            return;
+        }
+
+        userKeys.forEach(eKey => {
+            let u = usersList[eKey];
+            tbody.innerHTML += `
+                <tr>
+                    <td><b>${u.name}</b></td>
+                    <td>${u.phone || 'غير مدخل'}</td>
+                    <td>${eKey}</td>
+                    <td style="text-align:center; display:flex; gap:4px; justify-content:center; flex-wrap:wrap;">
+                        <button onclick="changeUserStatus('${eKey}', 'مغلق')" style="background:#e67e22; color:#fff; border:none; padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer;">🔒 تقفيل</button>
+                        <button onclick="changeUserStatus('${eKey}', 'محظور')" style="background:#d35400; color:#fff; border:none; padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer;">🚫 حظر</button>
+                        <button onclick="sendUserMsg('${u.phone}')" style="background:#2980b9; color:#fff; border:none; padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer;">✉️ إرسال رسالة</button>
+                        <button onclick="deleteUserAccount('${eKey}')" style="background:#c0392b; color:#fff; border:none; padding:4px 8px; border-radius:4px; font-size:10px; cursor:pointer;">🗑️ حذف</button>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    function changeUserStatus(email, status) {
+        let usersList = JSON.parse(localStorage.getItem('desert_users_db') || '{}');
+        if(usersList[email]) {
+            usersList[email].status = status;
+            localStorage.setItem('desert_users_db', JSON.stringify(usersList));
+            alert(`تم تغيير حالة الحساب (${email}) إلى: ${status}`);
+            renderAdminPanel();
+        }
+    }
+
+    function sendUserMsg(phone) {
+        if(!phone || phone === 'غير مدخل') { alert('رقم الجوال غير متوفر لهذا المستخدم'); return; }
+        let msg = prompt("أدخل نص الرسالة المراد إرسالها للعميل عبر واتساب:");
+        if(msg) {
+            window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+        }
+    }
+
+    function deleteUserAccount(email) {
+        if(confirm(`هل أنت متأكد من حذف الحساب (${email}) نهائياً؟`)) {
+            let usersList = JSON.parse(localStorage.getItem('desert_users_db') || '{}');
+            delete usersList[email];
+            localStorage.setItem('desert_users_db', JSON.stringify(usersList));
+            alert('تم حذف الحساب بنجاح.');
+            renderAdminPanel();
+        }
+    }
+
+    function logoutAccount() {
+        closeSettingsModal();
+        localStorage.removeItem('desert_active_email');
+        currentEmail = "";
+        document.getElementById('main-app').classList.remove('active');
+        document.getElementById('login-screen').classList.add('active');
+        document.getElementById('login-email').value = '';
+        document.getElementById('login-password').value = '';
+        document.getElementById('admin-tab-btn').style.display = 'none';
+    }
+
+    function enterApp() {
+        document.getElementById('login-screen').classList.remove('active');
+        document.getElementById('main-app').classList.add('active');
+        updateHeaderAndAppUI();
+        renderPosProducts();
+        renderInventoryTable();
+        loadCurrentInvoiceToUI();
+        renderDebtsTable();
+        renderVouchersTable();
+        renderPaymentVouchersTable();
+        renderPurchasesTable();
+        renderExpiryTable();
+    }
+
+    function startBarcodeScanner(targetInputId) {
+        document.getElementById('barcode-modal').classList.add('active');
+        
+        if (html5QrCodeScanner) {
+            html5QrCodeScanner.clear().catch(error => {
+                console.error("Failed to clear html5QrCodeScanner. ", error);
+            });
+        }
+
+        html5QrCodeScanner = new Html5Qrcode("reader");
+        const config = { fps: 10, qrbox: { width: 250, height: 150 } };
+
+        html5QrCodeScanner.start(
+            { facingMode: "environment" }, 
+            config, 
+            (decodedText, decodedResult) => {
+                stopBarcodeScanner();
+                if (targetInputId === 'search-box') {
+                    let searchInput = document.getElementById('search-box');
+                    searchInput.value = decodedText;
+                    searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+                    renderPosProducts();
+                } else if (targetInputId === 'new-p-barcode') {
+                    let barcodeInput = document.getElementById('new-p-barcode');
+                    if (barcodeInput) barcodeInput.value = decodedText;
+                }
+                let foundProd = products.find(p => p.barcode === decodedText);
+                if (foundProd) {
+                    addathyroidItem(foundProd.id);
+                    alert(currentLang === 'ar' ? '✅ تمت إضافة المنتج تلقائياً: ' + foundProd.name : '✅ Auto-added: ' + foundProd.name);
+                } else {
+                    alert(currentLang === 'ar' ? '⚠️ لم يتم العثور على منتج بهذا الباركود: ' + decodedText : '⚠️ No product found for barcode: ' + decodedText);
+                }
+            },
+            (errorMessage) => {}
+        ).catch((err) => {
+            alert("تعذر تشغيل الكاميرا: تأكد من منح الصلاحيات أو أن المتصفح يدعم الكاميرا.");
+            stopBarcodeScanner();
+        });
+    }
+
+    function stopBarcodeScanner() {
+        document.getElementById('barcode-modal').classList.remove('active');
+        if (html5QrCodeScanner) {
+            html5QrCodeScanner.stop().then(() => {
+                html5QrCodeScanner.clear();
+            }).catch(err => {
+                console.error("Failed to stop scanner", err);
+            });
+        }
+    }
+
+    // ===== دوال صورة المنتج في المخزن =====
+    window.newProductImageBase64 = '';
+    let productImageInputEl = null;
+
+    function previewNewProductImage(input) {
+        let file = input.files && input.files[0];
+        if(!file) return;
+        let reader = new FileReader();
+        reader.onload = function(e) {
+            window.newProductImageBase64 = e.target.result;
+            document.getElementById('new-p-image-preview').innerHTML =
+                '<img src="' + e.target.result + '" style="max-height:90px; max-width:120px; border:1px solid #16a085; border-radius:6px; padding:2px; box-shadow:0 1px 4px rgba(0,0,0,0.1);">';
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function captureProductImage() {
+        let inp = document.getElementById('new-p-image');
+        if(inp.capture !== undefined) { inp.setAttribute('capture', 'environment'); }
+        inp.click();
+    }
+
+    function clearNewProductImage() {
+        window.newProductImageBase64 = '';
+        let inp = document.getElementById('new-p-image');
+        if(inp) { inp.value = ''; inp.removeAttribute('capture'); }
+        let prevBox = document.getElementById('new-p-image-preview');
+        if(prevBox) prevBox.innerHTML = '';
+    }
+
+    function viewProductImage(id) {
+        let p = products.find(item => item.id === id);
+        if(!p || !p.image) return;
+        let ov = document.createElement('div');
+        ov.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:999999; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:20px;';
+        ov.innerHTML = '<img src="' + p.image + '" style="max-width:90%; max-height:80vh; border-radius:10px; box-shadow:0 4px 20px rgba(0,0,0,0.5);"><button onclick="this.parentElement.remove()" style="margin-top:18px; background:#c0392b; color:#fff; border:none; padding:10px 22px; border-radius:6px; font-weight:bold; cursor:pointer;">إغلاق ✖</button>';
+        document.body.appendChild(ov);
+    }
+
+    function editProductImage(id) {
+        let p = products.find(item => item.id === id);
+        if(!p) return;
+        let inp = document.createElement('input');
+        inp.type = 'file';
+        inp.accept = 'image/*';
+        inp.onchange = function() {
+            let file = inp.files && inp.files[0];
+            if(!file) return;
+            let reader = new FileReader();
+            reader.onload = function(e) {
+                p.image = e.target.result;
+                saveUserData();
+                renderInventoryTable();
+                renderPosProducts();
+                alert(currentLang === 'ar' ? 'تم تحديث صورة المنتج بنجاح.' : 'Product image updated.');
+            };
+            reader.readAsDataURL(file);
+        };
+        inp.click();
+    }
+
+    function addNewProduct() {
+        closeKeypad();
+        let name = document.getElementById('new-p-name').value.trim();
+        let barcode = document.getElementById('new-p-barcode').value.trim();
+        let buyPrice = parseFloat(document.getElementById('new-p-buy').value) || 0;
+        let price = parseFloat(document.getElementById('new-p-price').value) || 0;
+        let qty = parseFloat(document.getElementById('new-p-qty').value) || 0;
+        let curr = document.getElementById('new-p-curr').value;
+                let prodDate = document.getElementById('new-p-prod-date').value;
+        let expDate = document.getElementById('new-p-exp-date').value;
+        let image = (window.newProductImageBase64 || '').trim();
+
+        if(!name || isNaN(price)) { 
+            alert(currentLang === 'ar' ? 'الرجاء إدخال اسم المنتج وسعر البيع.' : 'Please enter product name and selling price.'); 
+            return; 
+        }
+        products.push({ id: Date.now(), name, barcode, buyPrice, price, qty, curr, prodDate, expDate, image });
+        window.newProductImageBase64 = '';
+        document.getElementById('new-p-image').value = '';
+        let prevBox = document.getElementById('new-p-image-preview');
+        if(prevBox) prevBox.innerHTML = '';
+        document.getElementById('new-p-name').value = '';
+        document.getElementById('new-p-barcode').value = '';
+        document.getElementById('new-p-buy').value = '';
+        document.getElementById('new-p-price').value = '';
+        document.getElementById('new-p-qty').value = '';
+        document.getElementById('new-p-prod-date').value = '';
+        document.getElementById('new-p-exp-date').value = '';
+        renderPosProducts();
+        renderInventoryTable();
+        renderExpiryTable();
+        saveUserData();
+        alert(currentLang === 'ar' ? 'تمت إضافة المنتج بنجاح.' : 'Product added successfully.');
+    }
+
+    function deleteProduct(id) {
+        if(confirm(currentLang === 'ar' ? 'هل أنت متأكد من حذف هذا المنتج؟' : 'Are you sure you want to delete this product?')) {
+            products = products.filter(p => p.id !== id);
+            renderPosProducts();
+            renderInventoryTable();
+            renderExpiryTable();
+            saveUserData();
+            alert(currentLang === 'ar' ? 'تم الحذف بنجاح.' : 'Deleted successfully.');
+        }
+    }
+
+    function renderInventoryTable() {
+        let tbody = document.getElementById('inventory-table-body');
+        tbody.innerHTML = '';
+        if(products.length === 0) { 
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;">${currentLang === 'ar' ? 'المخزن فارغ حالياً' : 'Inventory is currently empty'}</td></tr>`; 
+            return; 
+        }
+        products.forEach(p => {
+            let imgCell = p.image
+                ? `<img src="${p.image}" alt="صورة" style="width:46px; height:46px; object-fit:cover; border-radius:6px; border:1px solid #ddd; cursor:pointer;" onclick="viewProductImage(${p.id})">`
+                : `<div style="width:46px; height:46px; background:#f0f4f8; border:1px dashed #bbb; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:9px; color:#aaa;">لا صورة</div>`;
+            tbody.innerHTML += `<tr>
+                <td style="text-align:center;">${imgCell}</td>
+                <td>${p.name}</td>
+                <td>${p.barcode || '-'}</td>
+                <td>${p.buyPrice}</td>
+                <td>${p.price}</td>
+                <td><b>${p.qty}</b></td>
+                <td>${p.curr}</td>
+                <td style="text-align:center; display:flex; gap:4px; justify-content:center; flex-wrap:wrap;">
+                    <button onclick="editProductImage(${p.id})" style="background:#2980b9; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:11px;">📷 صورة</button>
+                    <button onclick="deleteProduct(${p.id})" style="background:#c0392b; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:11px;">🗑️ ${currentLang === 'ar' ? 'حذف' : 'Delete'}</button>
+                </td>
+            </tr>`;
+        });
+    }
+
+    function handleBarcodeEnter() {
+        let query = document.getElementById('search-box').value.trim();
+        if(!query) return;
+        let foundProd = products.find(p => p.barcode && p.barcode === query);
+        if(foundProd) {
+            addathyroidItem(foundProd.id);
+            document.getElementById('search-box').value = '';
+            renderPosProducts();
+            alert(currentLang === 'ar' ? '✅ تمت إضافة المنتج: ' + foundProd.name : '✅ Added: ' + foundProd.name);
+        }
+    }
+
+    function renderPosProducts() {
+        const grid = document.getElementById('pos-products-grid');
+        const query = document.getElementById('search-box').value.toLowerCase();
+        grid.innerHTML = '';
+        
+        let filtered = products.filter(p => p.name.toLowerCase().includes(query) || (p.barcode && p.barcode.toLowerCase().includes(query)));
+        let stockText = currentLang === 'ar' ? 'المتبقي بالمخزن:' : 'In Stock:';
+
+        filtered.forEach(p => {
+            let badgeColor = p.qty > 0 ? '#16a085' : '#c0392b';
+            let badgeBg = p.qty > 0 ? '#e8f8f5' : '#fadbd8';
+            let imgHtml = p.image
+                ? `<img src="${p.image}" alt="${p.name}" style="width:100%; height:78px; object-fit:cover; border-radius:6px; margin-bottom:5px; border:1px solid #e1e8ed;">`
+                : `<div style="width:100%; height:78px; background:#eef2f7; border:1px dashed #bdc3c7; border-radius:6px; margin-bottom:5px; display:flex; align-items:center; justify-content:center; font-size:22px; color:#bdc3c7;">📦</div>`;
+            
+            grid.innerHTML += `
+                <div class="p-card" onclick="addathyroidItem(${p.id})">
+                    ${imgHtml}
+                    <h4>${p.name}</h4>
+                    <span>${p.price} ${p.curr}</span>
+                    <div style="margin-top:6px; font-size:10px; background:${badgeBg}; color:${badgeColor}; border:1px solid ${badgeColor}; border-radius:4px; padding:2px 4px; font-weight:bold;">
+                        ${stockText} ${p.qty}
+                    </div>
+                </div>`;
+        });
+    }
+
+    function addathyroidItem(id) {
+        let p = products.find(item => item.id === id);
+        if(!p) return;
+        
+        let inv = invoices[currentInvIndex];
+        let existing = inv.items.find(i => i.id === id);
+        let currentInInv = existing ? existing.qty : 0;
+        
+        if(p.qty <= 0) {
+            alert(currentLang === 'ar' ? "الكمية خاصة بالمخزن انتهت! المنتج غير متوفر." : "Stock exhausted! Product unavailable.");
+            return;
+        }
+
+        if(currentInInv + 1 > p.qty) {
+            alert(currentLang === 'ar' ? `الكمية خاصة بالمخزن انتهت! المتبقي المتاح في المخزن هو (${p.qty}) فقط.` : `Stock capacity reached! Only (${p.qty}) available in stock.`);
+            return;
+        }
+
+        if(existing) existing.qty = Math.round((existing.qty + 1) * 1000) / 1000;
+        else inv.items.push({ id: p.id, name: p.name, price: p.price, buyPrice: p.buyPrice, curr: p.curr, qty: 1, unit: "قطعة" });
+        
+        renderInvoiceItems();
+        saveCurrentInvoiceState();
+    }
+
+    function updateInvoiceItem(index, field, value) {
+        let inv = invoices[currentInvIndex];
+        if(!inv || !inv.items[index]) return;
+        
+        if(field === 'name') inv.items[index].name = value;
+        if(field === 'qty') {
+            let requestedQty = parseFloat(value) || 0;
+            let p = products.find(prod => prod.id === inv.items[index].id);
+            
+            if(p && requestedQty > p.qty) {
+                alert(currentLang === 'ar' ? `الكمية خاصة بالمخزن انتهت! الكمية المتوفرة في المخزن هي (${p.qty}) فقط.` : `Stock capacity reached! Available in stock: (${p.qty}).`);
+                inv.items[index].qty = p.qty;
+            } else {
+                inv.items[index].qty = requestedQty;
+            }
+        }
+        if(field === 'price') inv.items[index].price = parseFloat(value) || 0;
+        renderInvoiceItems();
+        saveCurrentInvoiceState();
+    }
+
+    const unitOptions = ["قطعة", "وحدة", "كرتون", "نص كرتون", "ربع كرتون", "كيلو", "نص كيلو", "ربع كيلو"];
+
+    function toggleItemUnit(index) {
+        let inv = invoices[currentInvIndex];
+        if(!inv || !inv.items[index]) return;
+        let currentUnit = inv.items[index].unit || "قطعة";
+        let curIdx = unitOptions.indexOf(currentUnit);
+        let nextIdx = (curIdx + 1) % unitOptions.length;
+        inv.items[index].unit = unitOptions[nextIdx];
+        renderInvoiceItems();
+        saveCurrentInvoiceState();
+    }
+
+    function deleteInvoiceItem(index) {
+        let inv = invoices[currentInvIndex];
+        if(!inv) return;
+        inv.items.splice(index, 1);
+        renderInvoiceItems();
+        saveCurrentInvoiceState();
+    }
+
+    function renderInvoiceItems() {
+        let inv = invoices[currentInvIndex];
+        let box = document.getElementById('invoice-items-list');
+        
+        let noItemsText = currentLang === 'ar' ? 'لا توجد منتجات بالفاتورة' : 'No items in current invoice';
+        let subtotalText = currentLang === 'ar' ? 'الإجمالي قبل الخصم: ' : 'Subtotal before discount: ';
+        let discountText = currentLang === 'ar' ? 'قيمة الخصم: ' : 'Discount value: ';
+        let totalText = currentLang === 'ar' ? 'الإجمالي بعد الخصم: ' : 'Total after discount: ';
+
+        if(!inv || inv.items.length === 0) {
+            box.innerHTML = noItemsText;
+            document.getElementById('inv-subtotal').innerText = subtotalText + '0';
+            document.getElementById('inv-discount-val').innerText = discountText + '0';
+            document.getElementById('inv-totals-container').innerText = totalText + '0';
+            return;
+        }
+        
+        let thItem = currentLang === 'ar' ? 'الصنف' : 'Item';
+        let thQty = currentLang === 'ar' ? 'الكمية / الوحدة' : 'Qty / Unit';
+        let thPrice = currentLang === 'ar' ? 'السعر الفردي' : 'Unit Price';
+        let thTotal = currentLang === 'ar' ? 'المجموع' : 'Total';
+        let thAction = currentLang === 'ar' ? 'إجراء' : 'Action';
+
+        let html = `<table><tr><th>${thItem}</th><th>${thQty}</th><th>${thPrice}</th><th>${thTotal}</th><th>${thAction}</th></tr>`;
+        let subtotalByCurr = {}; 
+        inv.items.forEach((item, idx) => {
+            let totalItem = Math.round((item.price * item.qty) * 100) / 100;
+            subtotalByCurr[item.curr] = (subtotalByCurr[item.curr] || 0) + totalItem;
+            let unitText = item.unit || "قطعة";
+            html += `<tr>
+                <td><input type="text" class="editable-input" value="${item.name}" onchange="updateInvoiceItem(${idx}, 'name', this.value)"></td>
+                <td>
+                    <div style="display:flex; gap:2px; align-items:center;">
+                        <input type="number" step="any" min="0" class="editable-input" style="width:60px;" value="${item.qty}" onchange="updateInvoiceItem(${idx}, 'qty', this.value)">
+                        <button class="unit-toggle-btn" onclick="toggleItemUnit(${idx})">${unitText}</button>
+                    </div>
+                </td>
+                <td><input type="number" step="any" class="editable-input" style="width:60px;" value="${item.price}" onchange="updateInvoiceItem(${idx}, 'price', this.value)"></td>
+                <td>${totalItem} ${item.curr}</td>
+                <td><button onclick="deleteInvoiceItem(${idx})" style="background:#c0392b; color:#fff; border:none; padding:2px 5px; border-radius:3px; cursor:pointer;">🗑️</button></td>
+            </tr>`;
+        });
+        html += `</table>`;
+        box.innerHTML = html;
+
+        let discount = parseFloat(document.getElementById('inv-discount').value) || 0;
+        let discountCurr = document.getElementById('discount-curr').value;
+
+        let subtotalTexts = [];
+        for(let curr in subtotalByCurr) subtotalTexts.push(`${subtotalByCurr[curr]} ${curr}`);
+        document.getElementById('inv-subtotal').innerText = `${subtotalText} ${subtotalTexts.join(' + ')}`;
+        document.getElementById('inv-discount-val').innerText = `${discountText} ${discount} ${discountCurr}`;
+
+        let finalTexts = [];
+        for(let curr in subtotalByCurr) {
+            let finalVal = subtotalByCurr[curr];
+            if(curr === discountCurr) { finalVal -= discount; if(finalVal < 0) finalVal = 0; }
+            finalTexts.push(`${Math.round(finalVal * 100) / 100} ${curr}`);
+        }
+        document.getElementById('inv-totals-container').innerText = `${totalText} ${finalTexts.join(' + ')}`;
+    }
+
+    function createNewCustomerAccount() {
+        closeKeypad();
+        invoices.push({ custName: "", custPhone: "", items: [], discount: 0, discountCurr: "ريال يمني", paymentType: "نقدي", date: new Date().toLocaleString('ar-EG') });
+        currentInvIndex = invoices.length - 1;
+        loadCurrentInvoiceToUI();
+        saveUserData();
+    }
+
+    function loadCurrentInvoiceToUI() {
+        if(invoices.length === 0) {
+            invoices.push({ custName: "", custPhone: "", items: [], discount: 0, discountCurr: "ريال يمني", paymentType: "نقدي", date: new Date().toLocaleString('ar-EG') });
+            currentInvIndex = 0;
+        }
+        if(currentInvIndex >= invoices.length) currentInvIndex = invoices.length - 1;
+        let inv = invoices[currentInvIndex];
+        if(!inv) return;
+        
+        let invNumLabel = currentLang === 'ar' ? 'فاتورة رقم: ' : 'Invoice #: ';
+        document.getElementById('inv-number-display').innerText = `${invNumLabel}${currentInvIndex + 1}`;
+        document.getElementById('cust-name').value = inv.custName || '';
+        document.getElementById('cust-phone').value = inv.custPhone || '';
+        document.getElementById('inv-discount').value = inv.discount || 0;
+        document.getElementById('discount-curr').value = inv.discountCurr || "ريال يمني";
+        renderInvoiceItems();
+    }
+
+    function saveCurrentInvoiceState() {
+        let inv = invoices[currentInvIndex];
+        if(!inv) return;
+        inv.custName = document.getElementById('cust-name').value;
+        inv.custPhone = document.getElementById('cust-phone').value;
+        inv.discount = parseFloat(document.getElementById('inv-discount').value) || 0;
+        inv.discountCurr = document.getElementById('discount-curr').value;
+        saveUserData();
+    }
+
+    function navigateInvoice(direction) {
+        closeKeypad();
+        let newIndex = currentInvIndex + direction;
+        if(newIndex >= 0 && newIndex < invoices.length) { 
+            currentInvIndex = newIndex; 
+            loadCurrentInvoiceToUI(); 
+        }
+    }
+
+    function clearInvoice() {
+        closeKeypad();
+        let inv = invoices[currentInvIndex];
+        if(!inv) return;
+        
+        if(invoices.length > 1) {
+            invoices.splice(currentInvIndex, 1);
+            currentInvIndex = Math.max(0, currentInvIndex - 1);
+        } else {
+            inv.items = []; 
+            inv.custName = ""; 
+            inv.custPhone = ""; 
+            inv.discount = 0;
+            inv.paymentType = "نقدي";
+        }
+        
+        loadCurrentInvoiceToUI();
+        saveUserData();
+    }
+
+    function checkout(type) {
+        closeKeypad();
+        let inv = invoices[currentInvIndex];
+        if(!inv || inv.items.length === 0) { 
+            alert(currentLang === 'ar' ? 'الفاتورة فارغة!' : 'Invoice is empty!'); 
+            return; 
+        }
+
+        inv.paymentType = type;
+
+        inv.items.forEach(item => {
+            let p = products.find(prod => prod.id === item.id);
+            if(p) {
+                p.qty = Math.max(0, Math.round((p.qty - item.qty) * 1000) / 1000);
+            }
+        });
+
+        if(type === 'نقدي' || type === 'شبكة') {
+            recordCompletedSale(inv, type, currentInvIndex + 1);
+            alert(currentLang === 'ar' ? 'تم إتمام الدفع (' + type + ') بنجاح.' : 'Payment completed (' + type + ') successfully.');
+        } else if(type === 'آجل') {
+            let subtotalByCurr = {};
+            inv.items.forEach(i => {
+                let t = i.price * i.qty;
+                subtotalByCurr[i.curr] = (subtotalByCurr[i.curr] || 0) + t;
+            });
+            
+            debtsRecords.push({
+                id: Date.now(),
+                invNum: currentInvIndex + 1,
+                custName: inv.custName || 'عميل آجل',
+                custPhone: inv.custPhone || '',
+                subtotalByCurr: subtotalByCurr,
+                discount: inv.discount || 0,
+                discountCurr: inv.discountCurr || "ريال تمني",
+                items: JSON.parse(JSON.stringify(inv.items)),
+                date: inv.date
+            });
+
+            saveUserData();
+            renderDebtsTable();
+
+            // رسالة العايز التفصيلية: الأصناف + المبلغ + العملة
+            let itemsList = inv.items.map(i => i.name + ' (×' + i.qty + ')').join('، ');
+            let amountsList = Object.keys(subtotalByCurr).map(c => {
+                return subtotalByCurr[c] + ' ' + c;
+            }).join(' + ');
+            let debtMsg = '⚠️ هناك عايز في:\n' +
+                          'الشراء: ' + itemsList + '\n' +
+                          'المبلغ: ' + amountsList;
+            let debtMsgEn = '⚠️ There is a debt:\n' +
+                            'Items: ' + itemsList + '\n' +
+                            'Amount: ' + amountsList;
+            alert(currentLang === 'ar' ? debtMsg : debtMsgEn);
+        }
+
+        printInvoice();
+        renderInventoryTable();
+        renderPosProducts();
+        createNewCustomerAccount();
+    }
+
+    function makeQuotation() { 
+        closeKeypad(); 
+        let inv = invoices[currentInvIndex];
+        if(!inv || inv.items.length === 0) { 
+            alert(currentLang === 'ar' ? 'الفاتورة فارغة!' : 'Invoice is empty!'); 
+            return; 
+        }
+        
+        inv.paymentType = "عرض سعر";
+        printInvoice();
+        alert(currentLang === 'ar' ? 'تم إصدار عرض السعر بنجاح.' : 'Quotation issued successfully.'); 
+    }
+
+    function savePurchaseRecord() {
+        let name = document.getElementById('purch-name').value.trim();
+        let amount = parseFloat(document.getElementById('purch-amount').value) || 0;
+        let curr = document.getElementById('purch-curr').value;
+        let method = document.getElementById('purch-method').value;
+
+        if(!name || amount <= 0) { 
+            alert(currentLang === 'ar' ? 'الرجاء إدخال بيان المشتريات ومبلغ صحيح.' : 'Please enter item description and valid amount.'); 
+            return; 
+        }
+
+        let recordId = Date.now();
+        let nowDate = new Date().toLocaleString('ar-EG');
+
+        if(method === 'نقد') {
+            // نقد: حفظ السجل + خصم فوري من الأرباح كما في السابق
+            purchasesRecords.push({ id: recordId, name, amount, curr, method: 'نقد', remainingDebt: 0, date: nowDate, timestamp: recordId });
+
+            let deductSalesObj = {};
+            deductSalesObj[curr] = -amount;
+
+            completedSalesRecords.push({
+                id: recordId,
+                displayNum: 'مشتريات',
+                custName: name,
+                subtotalByCurr: deductSalesObj,
+                totalCostByCurr: {},
+                type: 'مشتريات (خصم)',
+                date: nowDate,
+                timestamp: recordId
+            });
+
+            saveUserData();
+            renderPurchasesTable();
+            renderProfitsReport();
+            clearPurchaseFields();
+            alert(currentLang === 'ar' ? 'تم حفظ المشتريات (نقد) وخصم تكلفتها فوراً من المبيعات المؤكدة وصافي الأرباح.' : 'Purchase recorded (cash) and immediately deducted from confirmed sales and net profit.');
+        } else {
+            // آجل: تسجيل دين باسم الغرض، بدون خصم فوري
+            purchasesRecords.push({ id: recordId, name, amount, curr, method: 'آجل', remainingDebt: amount, date: nowDate, timestamp: recordId });
+
+            saveUserData();
+            renderPurchasesTable();
+            refreshPurchaseDebtSelect();
+            clearPurchaseFields();
+            alert(currentLang === 'ar' ? 'تم تسجيل المشتريات (آجل) كدين باسم الغرض: ' + name + '. سيتم الخصم من الأرباح عند تسديد الدين عبر سند صرف المشتريات.' : 'Purchase recorded (credit) as a debt under the item name. It will be deducted from profits when paid via purchase payment voucher.');
+        }
+    }
+
+    function refreshPurchaseDebtSelect() {
+        let sel = document.getElementById('purch-pay-debt-select');
+        if(!sel) return;
+        let currSel = sel.value;
+        sel.innerHTML = '<option value="">-- اختر الغرض --</option>';
+        purchasesRecords.forEach(p => {
+            if(p.method === 'آجل' && p.remainingDebt > 0) {
+                sel.innerHTML += `<option value="${p.id}">${p.name} | دين متبقي: ${p.remainingDebt} ${p.curr}</option>`;
+            }
+        });
+        if(currSel) sel.value = currSel;
+    }
+
+    function savePurchasePaymentVoucher() {
+        let debtId = document.getElementById('purch-pay-debt-select').value;
+        let payAmount = parseFloat(document.getElementById('purch-pay-amount').value) || 0;
+        let payCurr = document.getElementById('purch-pay-curr').value;
+
+        if(!debtId) {
+            alert(currentLang === 'ar' ? 'الرجاء اختيار الغرض (دين شراء آجل) المراد تسديده.' : 'Please select the credit purchase item to pay.');
+            return;
+        }
+        if(payAmount <= 0) {
+            alert(currentLang === 'ar' ? 'الرجاء إدخال مبلغ صحيح للتسديد.' : 'Please enter a valid payment amount.');
+            return;
+        }
+
+        let purch = purchasesRecords.find(p => p.id == debtId);
+        if(!purch) {
+            alert(currentLang === 'ar' ? 'لم يتم العثور على سجل الشراء المحدد.' : 'Selected purchase record not found.');
+            return;
+        }
+
+        if(purch.curr !== payCurr) {
+            alert(currentLang === 'ar' ? 'تنبيه: عملة التسديد (' + payCurr + ') مختلفة عن عملة الدين (' + purch.curr + '). الرجاء استخدام نفس العملة.' : 'Warning: payment currency differs from debt currency. Please use the same currency.');
+            return;
+        }
+
+        if(payAmount > purch.remainingDebt) {
+            alert(currentLang === 'ar' ? 'المبلغ المُسدد (' + payAmount + ') أكبر من الدين المتبقي (' + purch.remainingDebt + '). سيتم تسديد الدين كاملاً.' : 'Payment amount exceeds remaining debt. Full debt will be paid.');
+            payAmount = purch.remainingDebt;
+        }
+
+        // خصم مبلغ التسديد من الدين المتبقي
+        purch.remainingDebt = +(purch.remainingDebt - payAmount).toFixed(2);
+
+        // إنشاء سجل خصم في completedSalesRecords (يخصم تلقائياً من إجمالي المبيعات المؤكدة، صافي الأرباح النهائي، أرباح السنة)
+        let deductSalesObj = {};
+        deductSalesObj[payCurr] = -payAmount;
+
+        completedSalesRecords.push({
+            id: Date.now(),
+            displayNum: 'سند صرف مشتريات',
+            custName: purch.name,
+            subtotalByCurr: deductSalesObj,
+            totalCostByCurr: {},
+            type: 'تسديد دين مشتريات (خصم)',
+            date: new Date().toLocaleString('ar-EG'),
+            timestamp: Date.now()
+        });
+
+        saveUserData();
+        renderPurchasesTable();
+        renderProfitsReport();
+        refreshPurchaseDebtSelect();
+        clearPurchasePaymentFields();
+
+        if(purch.remainingDebt > 0) {
+            alert(currentLang === 'ar' ? 'تم تسديد ' + payAmount + ' ' + payCurr + ' من دين شراء: ' + purch.name + '.\nالدين المتبقي: ' + purch.remainingDebt + ' ' + purch.curr + '.\nتم خصم المبلغ من إجمالي المبيعات المؤكدة وصافي الأرباح النهائي وأرباح السنة.' : 'Paid ' + payAmount + ' ' + payCurr + ' toward purchase debt: ' + purch.name + '. Remaining debt: ' + purch.remainingDebt + ' ' + purch.curr + '. Amount deducted from confirmed sales, net profit, and yearly profit.');
+        } else {
+            alert(currentLang === 'ar' ? 'تم تسديد دين شراء: ' + purch.name + ' بالكامل. المبلغ: ' + payAmount + ' ' + payCurr + '.\nتم خصم المبلغ من إجمالي المبيعات المؤكدة وصافي الأرباح النهائي وأرباح السنة.' : 'Purchase debt fully paid: ' + purch.name + '. Amount: ' + payAmount + ' ' + payCurr + '. Deducted from confirmed sales, net profit, and yearly profit.');
+        }
+    }
+
+    function clearPurchasePaymentFields() {
+        document.getElementById('purch-pay-debt-select').value = '';
+        document.getElementById('purch-pay-amount').value = '';
+    }
+
+    function deletePurchaseRecord(id) {
+        if(confirm(currentLang === 'ar' ? 'هل أنت متأكد من حذف هذا السجل للمشتريات؟' : 'Delete this purchase record?')) {
+            let purch = purchasesRecords.find(p => p.id === id);
+            purchasesRecords = purchasesRecords.filter(p => p.id !== id);
+            // إزالة سجل الخصم المقابل من completedSalesRecords
+            if(purch) {
+                if(purch.method === 'نقد') {
+                    // نقد: كان هناك سجل خصم واحد بمبلغ كامل
+                    completedSalesRecords = completedSalesRecords.filter(rec =>
+                        !(rec.displayNum === 'مشتريات' && rec.custName === purch.name && rec.subtotalByCurr[purch.curr] === -purch.amount)
+                    );
+                } else {
+                    // آجل: قد يكون هناك سجلات تسديد متعددة في completedSalesRecords
+                    completedSalesRecords = completedSalesRecords.filter(rec =>
+                        !(rec.displayNum === 'سند صرف مشتريات' && rec.custName === purch.name)
+                    );
+                }
+            }
+            saveUserData();
+            renderPurchasesTable();
+            renderProfitsReport();
+            refreshPurchaseDebtSelect();
+            alert(currentLang === 'ar' ? 'تم حذف سجل المشتريات بنجاح.' : 'Purchase record deleted successfully.');
+        }
+    }
+
+    function renderPurchasesTable() {
+        let tbody = document.getElementById('purchases-table-body');
+        tbody.innerHTML = '';
+        if(purchasesRecords.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;">${currentLang === 'ar' ? 'لا توجد مشتريات مسجلة' : 'No recorded purchases'}</td></tr>`;
+            return;
+        }
+        purchasesRecords.forEach(p => {
+            let methodBadge = '';
+            if(p.method === 'آجل') {
+                methodBadge = `<span style="background:#e67e22; color:#fff; padding:2px 8px; border-radius:10px; font-size:11px;">📋 آجل</span>`;
+            } else {
+                methodBadge = `<span style="background:#27ae60; color:#fff; padding:2px 8px; border-radius:10px; font-size:11px;">💵 نقد</span>`;
+            }
+            let debtCell = '';
+            if(p.method === 'آجل') {
+                if(p.remainingDebt > 0) {
+                    debtCell = `<span style="color:#c0392b; font-weight:bold;">${p.remainingDebt} ${p.curr}</span>`;
+                } else {
+                    debtCell = `<span style="color:#27ae60; font-weight:bold;">✔️ سُدد بالكامل</span>`;
+                }
+            } else {
+                debtCell = `<span style="color:#7f8c8d;">—</span>`;
+            }
+            tbody.innerHTML += `<tr>
+                <td>${p.name}</td>
+                <td style="color:#8e44ad; font-weight:bold;">${p.amount}</td>
+                <td>${p.curr}</td>
+                <td style="text-align:center;">${methodBadge}</td>
+                <td style="text-align:center;">${debtCell}</td>
+                <td>${p.date}</td>
+                <td style="text-align:center;"><button onclick="deletePurchaseRecord(${p.id})" style="background:#c0392b; color:#fff; border:none; padding:3px 6px; border-radius:4px; cursor:pointer; font-size:10px;">🗑️ ${currentLang === 'ar' ? 'حذف' : 'Delete'}</button></td>
+            </tr>`;
+        });
+    }
+
+    function clearPurchaseFields() {
+        document.getElementById('purch-name').value = '';
+        document.getElementById('purch-amount').value = '';
+        document.getElementById('purch-method').value = 'نقد';
+    }
+
+    function saveDebtRecord() {
+        let name = document.getElementById('debt-name').value.trim();
+        let phone = document.getElementById('debt-phone').value.trim();
+        let amount = parseFloat(document.getElementById('debt-amount').value) || 0;
+        let curr = document.getElementById('debt-curr').value;
+
+        if(!name || amount <= 0) { 
+            alert(currentLang === 'ar' ? 'الرجاء إدخال اسم المدين ومبلغ صحيح.' : 'Please enter debtor name and valid amount.'); 
+            return; 
+        }
+
+        let subObj = {};
+        subObj[curr] = amount;
+
+        debtsRecords.push({ 
+            id: Date.now(), 
+            invNum: 'مباشر', 
+            custName: name, 
+            custPhone: phone, 
+            subtotalByCurr: subObj, 
+            discount: 0, 
+            discountCurr: curr, 
+            items: [], 
+            date: new Date().toLocaleString('ar-EG') 
+        });
+        saveUserData();
+        renderDebtsTable();
+        alert(currentLang === 'ar' ? 'تم حفظ الدين بنجاح.' : 'Debt recorded successfully.');
+    }
+
+    function deleteDebtRecord(id) {
+        if(confirm(currentLang === 'ar' ? 'هل أنت متأكد من حذف هذا الدين/الآجل؟' : 'Delete this debt record?')) {
+            debtsRecords = debtsRecords.filter(d => d.id !== id);
+            saveUserData();
+            renderDebtsTable();
+            renderProfitsReport();
+            alert(currentLang === 'ar' ? 'تم حذف الدين بنجاح.' : 'Debt deleted successfully.');
+        }
+    }
+
+    function markDebtAsPaid(id) {
+        let debt = debtsRecords.find(d => d.id === id);
+        if(!debt) return;
+
+        if(confirm(currentLang === 'ar' ? 'هل أنت متأكد من تسديد هذه الفاتورة/الدين بالكامل ونقل المبلغ للمبيعات والأرباح؟' : 'Confirm marking debt as fully paid?')) {
+            let totalCostByCurr = {};
+            if(debt.items && debt.items.length > 0) {
+                debt.items.forEach(i => {
+                    let pObj = products.find(prod => prod.id === i.id);
+                    let bPrice = pObj ? pObj.buyPrice : (i.buyPrice || 0);
+                    totalCostByCurr[i.curr] = (totalCostByCurr[i.curr] || 0) + (bPrice * i.qty);
+                });
+            }
+
+            completedSalesRecords.push({
+                id: Date.now(),
+                displayNum: debt.invNum || 'سداد آجل',
+                custName: debt.custName,
+                subtotalByCurr: debt.subtotalByCurr,
+                totalCostByCurr: totalCostByCurr,
+                type: 'تم السداد (آجل)',
+                date: new Date().toLocaleString('ar-EG'),
+                timestamp: Date.now()
+            });
+
+            debtsRecords = debtsRecords.filter(d => d.id !== id);
+            saveUserData();
+            renderDebtsTable();
+            renderProfitsReport();
+            alert(currentLang === 'ar' ? 'تم نقل المبلغ إلى المبيعات بنجاح وتسديد الدين!' : 'Debt paid and transferred to sales!');
+        }
+    }
+
+    function renderDebtsTable() {
+        let tbody = document.getElementById('debts-table-body');
+        tbody.innerHTML = '';
+
+        let totalsByCurr = {};
+        let totalLabel = currentLang === 'ar' ? 'إجمالي الديون والآجل: ' : 'Total Debts & Credit: ';
+
+        if(debtsRecords.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;">${currentLang === 'ar' ? 'لا توجد ديون مسجلة حتى الآن' : 'No recorded debts'}</td></tr>`;
+            document.getElementById('total-debts-box').innerText = totalLabel + '0';
+            return;
+        }
+
+        debtsRecords.forEach(d => {
+            let totalsTextArr = [];
+            for(let curr in d.subtotalByCurr) {
+                let finalVal = d.subtotalByCurr[curr];
+                if(curr === d.discountCurr && d.discount) finalVal -= d.discount;
+                if(finalVal < 0) finalVal = 0;
+
+                if(finalVal > 0) {
+                    totalsTextArr.push(`${finalVal} ${curr}`);
+                    totalsByCurr[curr] = (totalsByCurr[curr] || 0) + finalVal;
+                }
+            }
+
+            if(totalsTextArr.length > 0) {
+                let paidText = currentLang === 'ar' ? '✔ تم السداد' : '✔ Paid';
+                let deleteText = currentLang === 'ar' ? '🗑️ حذف' : '🗑️ Delete';
+
+                tbody.innerHTML += `<tr>
+                    <td>${d.invNum}</td>
+                    <td>${d.custName}</td>
+                    <td style="color:#d35400; font-weight:bold;">${totalsTextArr.join(' + ')}</td>
+                    <td>${d.date}</td>
+                    <td style="text-align:center; display:flex; gap:4px; justify-content:center; flex-wrap:wrap;">
+                        <button onclick="printSavedDebt(${d.id})" style="background:#16a085; color:#fff; border:none; padding:3px 6px; border-radius:4px; cursor:pointer; font-size:10px;">🖨️ ${currentLang === 'ar' ? 'طباعة' : 'Print'}</button>
+                        <button onclick="printSavedDebtPDF(${d.id})" style="background:#9b59b6; color:#fff; border:none; padding:3px 6px; border-radius:4px; cursor:pointer; font-size:10px;">💾 ${currentLang === 'ar' ? 'PDF' : 'PDF'}</button>
+                        <button onclick="markDebtAsPaid(${d.id})" style="background:#27ae60; color:#fff; border:none; padding:3px 6px; border-radius:4px; cursor:pointer; font-size:10px;">${paidText}</button>
+                        <button onclick="deleteDebtRecord(${d.id})" style="background:#c0392b; color:#fff; border:none; padding:3px 6px; border-radius:4px; cursor:pointer; font-size:10px;">${deleteText}</button>
+                    </td>
+                </tr>`;
+            }
+        });
+
+        let overallArr = [];
+        for(let curr in totalsByCurr) {
+            overallArr.push(`${totalsByCurr[curr]} ${curr}`);
+        }
+        document.getElementById('total-debts-box').innerText = `${totalLabel}${overallArr.length > 0 ? overallArr.join(' + ') : '0'}`;
+    }
+
+    function clearDebtFields() {
+        document.getElementById('debt-name').value = '';
+        document.getElementById('debt-phone').value = '';
+        document.getElementById('debt-amount').value = '';
+    }
+
+    function saveReceiptVoucher() {
+        let name = document.getElementById('vouch-name').value.trim();
+        let phone = document.getElementById('vouch-phone').value.trim();
+        let amount = parseFloat(document.getElementById('vouch-amount').value) || 0;
+        let curr = document.getElementById('vouch-curr').value;
+
+        if(!name || amount <= 0) { 
+            alert(currentLang === 'ar' ? 'الرجاء إدخال اسم العميل ومبلغ قسط صحيح.' : 'Please enter customer name and valid installment amount.'); 
+            return; 
+        }
+
+        vouchersRecords.push({ 
+            id: Date.now(), 
+            name, 
+            phone, 
+            amount, 
+            curr, 
+            date: new Date().toLocaleString('ar-EG') 
+        });
+
+        let totalCostOfInstallment = 0;
+        let totalOriginalInvoiceAmount = 0;
+
+        let matchingDebts = debtsRecords.filter(d => d.custName.trim().toLowerCase() === name.toLowerCase());
+
+        matchingDebts.forEach(debt => {
+            if (debt.items && debt.items.length > 0) {
+                debt.items.forEach(i => {
+                    if(i.curr === curr) {
+                        let pObj = products.find(prod => prod.id === i.id);
+                        let bPrice = pObj ? pObj.buyPrice : (i.buyPrice || 0);
+                        totalOriginalInvoiceAmount += (i.price * i.qty);
+                        totalCostOfInstallment += (bPrice * i.qty);
+                    }
+                });
+            }
+        });
+
+        let profitRatio = 0;
+        if(totalOriginalInvoiceAmount > 0) {
+            let totalProfitOfDebt = totalOriginalInvoiceAmount - totalCostOfInstallment;
+            profitRatio = totalProfitOfDebt / totalOriginalInvoiceAmount;
+        } else {
+            profitRatio = 0.20;
+        }
+
+        let profitPortionOfInstallment = amount * profitRatio;
+        let costPortionOfInstallment = amount - profitPortionOfInstallment;
+
+        let payObj = {};
+        payObj[curr] = amount;
+
+        let costObj = {};
+        costObj[curr] = costPortionOfInstallment;
+
+        completedSalesRecords.push({
+            id: Date.now(),
+            displayNum: 'سند قبض (تقصيد)',
+            custName: name,
+            subtotalByCurr: payObj,
+            totalCostByCurr: costObj,
+            type: 'سند قبض تقصيد',
+            date: new Date().toLocaleString('ar-EG'),
+            timestamp: Date.now()
+        });
+
+        let remainingToDeduct = amount;
+
+        matchingDebts.forEach(debt => {
+            if (remainingToDeduct <= 0) return;
+
+            let curVal = debt.subtotalByCurr[curr] || 0;
+            if (curr === debt.discountCurr && debt.discount) {
+                curVal = Math.max(0, curVal - debt.discount);
+                debt.discount = 0; 
+            }
+
+            if (curVal > 0) {
+                if (remainingToDeduct >= curVal) {
+                    remainingToDeduct -= curVal;
+                    debt.subtotalByCurr[curr] = 0; 
+                } else {
+                    debt.subtotalByCurr[curr] = curVal - remainingToDeduct;
+                    remainingToDeduct = 0;
+                }
+            }
+        });
+
+        debtsRecords = debtsRecords.filter(d => {
+            let hasRemainingBalance = false;
+            for (let c in d.subtotalByCurr) {
+                if (d.subtotalByCurr[c] > 0) {
+                    hasRemainingBalance = true;
+                    break;
+                }
+            }
+            return hasRemainingBalance;
+        });
+
+        saveUserData();
+        renderVouchersTable();
+        renderDebtsTable();
+        renderProfitsReport();
+        clearVoucherFields();
+
+        // حساب المبلغ المتبقي على العميل بعد سند القبض
+        let remainingDebts = debtsRecords.filter(d => d.custName.trim().toLowerCase() === name.toLowerCase());
+        let remainingByCurr = {};
+        remainingDebts.forEach(d => {
+            for(let c in d.subtotalByCurr) {
+                if(d.subtotalByCurr[c] > 0) {
+                    remainingByCurr[c] = (remainingByCurr[c] || 0) + d.subtotalByCurr[c];
+                }
+            }
+        });
+
+        let remainingText = Object.keys(remainingByCurr).map(c => remainingByCurr[c] + ' ' + c).join(' + ');
+        let alertMsg;
+        if(remainingText && remainingText !== '0') {
+            alertMsg = currentLang === 'ar' 
+                ? '✅ تم تسجيل قسط التقصيد بنجاح!\n💰 المبلغ المتبقي على العميل "' + name + '":\n' + remainingText
+                : '✅ Installment recorded!\n💰 Remaining debt for "' + name + '":\n' + remainingText;
+        } else {
+            alertMsg = currentLang === 'ar'
+                ? '✅ تم تسجيل قسط التقصيد بنجاح!\n🎉 تم سداد الدين بالكامل — لا يوجد مبلغ متبقي على العميل "' + name + '".'
+                : '✅ Installment recorded!\n🎉 Debt fully paid — no remaining balance for "' + name + '".';
+        }
+        alert(alertMsg);
+    }
+
+    function deleteVoucherRecord(id) {
+        if(confirm(currentLang === 'ar' ? 'هل أنت متأكد من حذف سند القبض هذا؟' : 'Delete this receipt voucher?')) {
+            vouchersRecords = vouchersRecords.filter(v => v.id !== id);
+            saveUserData();
+            renderVouchersTable();
+            renderDebtsTable();
+            renderProfitsReport();
+            alert(currentLang === 'ar' ? 'تم حذف السند بنجاح.' : 'Voucher deleted successfully.');
+        }
+    }
+
+    function renderVouchersTable() {
+        let tbody = document.getElementById('vouchers-table-body');
+        tbody.innerHTML = '';
+        if(vouchersRecords.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">${currentLang === 'ar' ? 'لا توجد سندات قبض محفوظة' : 'No recorded receipt vouchers'}</td></tr>`;
+            return;
+        }
+        vouchersRecords.forEach(v => {
+            tbody.innerHTML += `<tr>
+                <td>${v.name}</td>
+                <td>${v.phone || '-'}</td>
+                <td style="color:#27ae60; font-weight:bold;">${v.amount}</td>
+                <td>${v.curr}</td>
+                <td>${v.date}</td>
+                <td style="text-align:center; display:flex; gap:4px; justify-content:center; flex-wrap:wrap;">
+                    <button onclick="printSavedVoucher(${v.id}, 'rec')" style="background:#16a085; color:#fff; border:none; padding:3px 6px; border-radius:4px; cursor:pointer; font-size:10px;">🖨️ ${currentLang === 'ar' ? 'طباعة' : 'Print'}</button>
+                    <button onclick="printSavedVoucherPDF(${v.id}, 'rec')" style="background:#9b59b6; color:#fff; border:none; padding:3px 6px; border-radius:4px; cursor:pointer; font-size:10px;">💾 ${currentLang === 'ar' ? 'PDF' : 'PDF'}</button>
+                    <button onclick="deleteVoucherRecord(${v.id})" style="background:#c0392b; color:#fff; border:none; padding:3px 6px; border-radius:4px; cursor:pointer; font-size:10px;">🗑️ ${currentLang === 'ar' ? 'حذف' : 'Delete'}</button>
+                </td>
+            </tr>`;
+        });
+    }
+
+    function clearVoucherFields() {
+        document.getElementById('vouch-name').value = '';
+        document.getElementById('vouch-phone').value = '';
+        document.getElementById('vouch-amount').value = '';
+    }
+
+    /* تعديل سند الصرف للخصم الدقيق والكامل بالعملة وبدون أي نقصان */
+    function savePaymentVoucher() {
+        let name = document.getElementById('pay-vouch-name').value.trim();
+        let phone = document.getElementById('pay-vouch-phone').value.trim();
+        let amount = parseFloat(document.getElementById('pay-vouch-amount').value) || 0;
+        let curr = document.getElementById('pay-vouch-curr').value;
+
+        if(!name || amount <= 0) { 
+            alert(currentLang === 'ar' ? 'الرجاء إدخال اسم المستفيد ومبلغ صحيح.' : 'Please enter beneficiary name and valid amount.'); 
+            return; 
+        }
+
+        paymentVouchersRecords.push({ id: Date.now(), name, phone, amount, curr, date: new Date().toLocaleString('ar-EG'), timestamp: Date.now() });
+
+        // تسجيل الخصم الدقيق بالكامل من المبيعات المؤكدة والأرباح النهائية بنفس المبلغ والعملة المحددة بالضبط
+        let deductSalesObj = {};
+        deductSalesObj[curr] = -amount;
+
+        completedSalesRecords.push({
+            id: Date.now(),
+            displayNum: 'سند صرف',
+            custName: name,
+            subtotalByCurr: deductSalesObj,
+            totalCostByCurr: {},
+            type: 'سند صرف (خصم)',
+            date: new Date().toLocaleString('ar-EG'),
+            timestamp: Date.now()
+        });
+
+        // تصفير وخصم ديون الموردين بالتوالي
+        let remainingAmount = amount;
+        let targetCurrency = curr;
+        let supplierDebts = debtsRecords.filter(d => d.custName.trim().toLowerCase() === name.toLowerCase());
+
+        if (supplierDebts.length > 0) {
+            supplierDebts.forEach(debt => {
+                if (remainingAmount <= 0) return;
+
+                for(let c in debt.subtotalByCurr) {
+                    if(debt.subtotalByCurr[c] > 0 && remainingAmount > 0 && c === targetCurrency) {
+                        let curVal = debt.subtotalByCurr[c];
+                        if(remainingAmount >= curVal) {
+                            remainingAmount -= curVal;
+                            debt.subtotalByCurr[c] = 0;
+                        } else {
+                            debt.subtotalByCurr[c] = curVal - remainingAmount;
+                            remainingAmount = 0;
+                        }
+                    }
+                }
+            });
+
+            debtsRecords = debtsRecords.filter(d => {
+                let hasBalance = false;
+                for(let c in d.subtotalByCurr) {
+                    if(d.subtotalByCurr[c] > 0) hasBalance = true;
+                }
+                return hasBalance;
+            });
+        }
+
+        saveUserData();
+        renderPaymentVouchersTable();
+        renderDebtsTable();
+        renderProfitsReport();
+        clearPaymentVoucherFields();
+        alert(currentLang === 'ar' ? 'تم اصدار سند الصرف وخصم المبلغ بدقة من المبيعات والأرباح وتصفير ديون الموردين بنجاح.' : 'Payment voucher issued and accurately deducted from sales and profits.');
+    }
+
+    function deletePaymentVoucherRecord(id) {
+        if(confirm(currentLang === 'ar' ? 'هل أنت متأكد من حذف سند الصرف هذا؟' : 'Delete this payment voucher?')) {
+            let pv = paymentVouchersRecords.find(v => v.id === id);
+            paymentVouchersRecords = paymentVouchersRecords.filter(v => v.id !== id);
+            // إزالة سجل الخصم المقابل من completedSalesRecords
+            if(pv) {
+                completedSalesRecords = completedSalesRecords.filter(rec =>
+                    !(rec.displayNum === 'سند صرف' && rec.custName === pv.name && rec.subtotalByCurr[pv.curr] === -pv.amount)
+                );
+            }
+            saveUserData();
+            renderPaymentVouchersTable();
+            renderDebtsTable();
+            renderProfitsReport();
+            alert(currentLang === 'ar' ? 'تم حذف سند الصرف بنجاح.' : 'Payment voucher deleted successfully.');
+        }
+    }
+
+    function renderPaymentVouchersTable() {
+        let tbody = document.getElementById('payment-vouchers-table-body');
+        tbody.innerHTML = '';
+        if(paymentVouchersRecords.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;">${currentLang === 'ar' ? 'لا توجد سندات صرف محفوظة' : 'No recorded payment vouchers'}</td></tr>`;
+            return;
+        }
+        paymentVouchersRecords.forEach(v => {
+            tbody.innerHTML += `<tr>
+                <td>${v.name}</td>
+                <td style="color:#c0392b; font-weight:bold;">${v.amount}</td>
+                <td>${v.curr}</td>
+                <td>${v.date}</td>
+                <td style="text-align:center; display:flex; gap:4px; justify-content:center; flex-wrap:wrap;">
+                    <button onclick="printSavedVoucher(${v.id}, 'pay')" style="background:#16a085; color:#fff; border:none; padding:3px 6px; border-radius:4px; cursor:pointer; font-size:10px;">🖨️ ${currentLang === 'ar' ? 'طباعة' : 'Print'}</button>
+                    <button onclick="printSavedVoucherPDF(${v.id}, 'pay')" style="background:#9b59b6; color:#fff; border:none; padding:3px 6px; border-radius:4px; cursor:pointer; font-size:10px;">💾 ${currentLang === 'ar' ? 'PDF' : 'PDF'}</button>
+                    <button onclick="deletePaymentVoucherRecord(${v.id})" style="background:#c0392b; color:#fff; border:none; padding:3px 6px; border-radius:4px; cursor:pointer; font-size:10px;">🗑️ ${currentLang === 'ar' ? 'حذف' : 'Delete'}</button>
+                </td>
+            </tr>`;
+        });
+    }
+
+    function clearPaymentVoucherFields() {
+        document.getElementById('pay-vouch-name').value = '';
+        document.getElementById('pay-vouch-phone').value = '';
+        document.getElementById('pay-vouch-amount').value = '';
+    }
+
+    /* دوال المعاينة والطباعة لكل الفواتير والسندات */
+    function buildInvoiceHTML(inv, displayIndex) {
+        let subtotalByCurr = {};
+        inv.items.forEach(i => {
+            let t = i.price * i.qty;
+            subtotalByCurr[i.curr] = (subtotalByCurr[i.curr] || 0) + t;
+        });
+
+        let discount = inv.discount || 0;
+        let discountCurr = inv.discountCurr || "ريال يمني";
+        let finalTexts = [];
+        for(let curr in subtotalByCurr) {
+            let val = subtotalByCurr[curr];
+            if(curr === discountCurr) val -= discount;
+            finalTexts.push(`${Math.max(0, val)} ${curr}`);
+        }
+
+        let itemsHtml = inv.items.map(i => `<tr><td>${i.name}</td><td>${i.qty} ${i.unit || 'قطعة'}</td><td>${i.price} ${i.curr}</td><td>${i.price * i.qty} ${i.curr}</td></tr>`).join('');
+
+        let printLogo = shopSettings.customInvoiceLogo || defaultAppLogoSVG;
+        let paymentTypeText = inv.paymentType || 'نقدي';
+        let custNameText = inv.custName || 'عميل نقدي';
+        let custPhoneText = inv.custPhone || '-';
+
+        let subTexts = [];
+        for(let curr in subtotalByCurr) subTexts.push(`${subtotalByCurr[curr]} ${curr}`);
+
+        let invNo = (displayIndex !== undefined ? displayIndex : currentInvIndex) + 1;
+        let style = shopSettings.invoiceStyle || '1';
+        let html = '';
+
+        if(style === '2') {
+            // ===== تصميم الجزلة - رأس صحراوي ذهبي =====
+            html = `
+            <div style="font-family:'Tahoma',sans-serif; direction:rtl; padding:0;">
+                <div style="background: linear-gradient(135deg, #b8860b 0%, #d4af37 50%, #b8860b 100%); color:#fff; padding:18px 15px; border-radius:10px 10px 0 0; text-align:center;">
+                    <div style="display:inline-block; vertical-align:middle; margin-bottom:6px;"><img src="${printLogo}" alt="شعار" style="max-height:50px; border:2px solid #fff; border-radius:50%; padding:3px; background:#fff;"></div>
+                    <h2 style="margin:4px 0 2px 0; color:#fff; text-shadow:1px 1px 2px rgba(0,0,0,0.3);">${shopSettings.name}</h2>
+                    <p style="font-size:11px; margin:2px 0; color:#fffbe6;">${shopSettings.address || ''} ${shopSettings.phone ? ' | الهاتف: ' + shopSettings.phone : ''}</p>
+                </div>
+                <div style="border:2px solid #d4af37; border-top:none; border-radius:0 0 10px 10px; padding:15px;">
+                    <h3 style="text-align:center; color:#b8860b; margin:0 0 10px 0; border-bottom:2px dashed #d4af37; padding-bottom:8px;">⚀ فاتورة مبيعات ⚀</h3>
+                    <div style="background:#fff8e7; padding:10px; border-radius:6px; font-size:12px; line-height:1.9;">
+                        <p style="margin:3px 0;"><b>اسم العميل:</b> ${custNameText}</p>
+                        <p style="margin:3px 0;"><b>رقم الهاتف:</b> ${custPhoneText} | <b>رقم الفاتورة:</b> ${invNo}</p>
+                        <p style="margin:3px 0;"><b>طريقة الدفع:</b> <span style="color:#b8860b; font-weight:bold;">${paymentTypeText}</span> | <b>التاريخ:</b> ${inv.date}</p>
+                    </div>
+                    <table border="1" style="width:100%; border-collapse:collapse; margin-top:10px; font-size:12px;">
+                        <tr style="background:#d4af37; color:#fff;"><th>الصنف</th><th>الكمية</th><th>السعر</th><th>المجموع</th></tr>
+                        ${itemsHtml}
+                    </table>
+                    <div style="text-align:left; margin-top:12px; line-height:1.9; font-size:13px;">
+                        <p style="margin:3px 0;">الإجمالي: ${subTexts.join(' + ')}</p>
+                        <p style="margin:3px 0; color:#c0392b;">الخصم: ${discount} ${discountCurr}</p>
+                        <h4 style="margin:6px 0; color:#b8860b; background:#fff8e7; padding:6px; border-radius:5px; border:1px solid #d4af37;">الإجمالي بعد الخصم: ${finalTexts.join(' + ')}</h4>
+                    </div>
+                    <p style="text-align:center; margin-top:18px; font-size:12px; color:#b8860b; font-weight:bold;">${shopSettings.footer}</p>
+                </div>
+            </div>`;
+        } else if(style === '3') {
+            // ===== تصميم المربعات - بطاقات ملونة =====
+            html = `
+            <div style="font-family:'Tahoma',sans-serif; direction:rtl; padding:0;">
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#2c3e50; color:#fff; padding:12px 15px; border-radius:8px 8px 0 0;">
+                    <div style="text-align:right; flex:1;">
+                        <h2 style="margin:0; color:#ecf0f1; font-size:18px;">${shopSettings.name}</h2>
+                        <p style="font-size:10px; margin:3px 0; color:#bdc3c7;">${shopSettings.address || ''} ${shopSettings.phone ? ' | ' + shopSettings.phone : ''}</p>
+                    </div>
+                    <div style="text-align:left;">
+                        <img src="${printLogo}" alt="شعار" style="max-height:45px; border-radius:6px;">
+                    </div>
+                </div>
+                <div style="border:2px solid #2c3e50; border-top:none; border-radius:0 0 8px 8px; padding:15px;">
+                    <div style="display:flex; gap:8px; margin-bottom:12px;">
+                        <div style="flex:1; background:#e74c3c; color:#fff; padding:8px; border-radius:6px; font-size:11px; text-align:center;">
+                            <div style="font-size:9px; opacity:0.9;">رقم الفاتورة</div>
+                            <div style="font-size:16px; font-weight:bold;">${invNo}</div>
+                        </div>
+                        <div style="flex:1; background:#3498db; color:#fff; padding:8px; border-radius:6px; font-size:11px; text-align:center;">
+                            <div style="font-size:9px; opacity:0.9;">اسم العميل</div>
+                            <div style="font-size:13px; font-weight:bold;">${custNameText}</div>
+                        </div>
+                        <div style="flex:1; background:#27ae60; color:#fff; padding:8px; border-radius:6px; font-size:11px; text-align:center;">
+                            <div style="font-size:9px; opacity:0.9;">طريقة الدفع</div>
+                            <div style="font-size:13px; font-weight:bold;">${paymentTypeText}</div>
+                        </div>
+                    </div>
+                    <div style="font-size:11px; color:#7f8c8d; margin-bottom:10px; text-align:center;">
+                        التاريخ: ${inv.date} | الهاتف: ${custPhoneText}
+                    </div>
+                    <table style="width:100%; border-collapse:collapse; margin-top:8px; font-size:12px;">
+                        <tr>
+                            <th style="background:#e74c3c; color:#fff; padding:6px; border:1px solid #c0392b;">الصنف</th>
+                            <th style="background:#3498db; color:#fff; padding:6px; border:1px solid #2980b9;">الكمية</th>
+                            <th style="background:#9b59b6; color:#fff; padding:6px; border:1px solid #8e44ad;">السعر</th>
+                            <th style="background:#27ae60; color:#fff; padding:6px; border:1px solid #229954;">المجموع</th>
+                        </tr>
+                        ${itemsHtml}
+                    </table>
+                    <div style="margin-top:12px;">
+                        <div style="background:#f39c12; color:#fff; padding:6px 12px; border-radius:6px; font-size:13px; font-weight:bold; text-align:left;">
+                            الإجمالي: ${subTexts.join(' + ')}
+                        </div>
+                        <div style="background:#e74c3c; color:#fff; padding:6px 12px; border-radius:6px; font-size:12px; text-align:left; margin-top:5px;">
+                            الخصم: ${discount} ${discountCurr}
+                        </div>
+                        <div style="background:#2c3e50; color:#fff; padding:8px 12px; border-radius:6px; font-size:15px; font-weight:bold; text-align:left; margin-top:5px;">
+                            الإجمالي بعد الخصم: ${finalTexts.join(' + ')}
+                        </div>
+                    </div>
+                    <p style="text-align:center; margin-top:15px; font-size:11px; color:#7f8c8d;">${shopSettings.footer}</p>
+                </div>
+            </div>`;
+        } else if(style === '4') {
+            // ===== تصميم الصحراء - رملي أردوفيخي فخم =====
+            html = `
+            <div style="font-family:'Georgia','Tahoma',serif; direction:rtl; padding:0; background:#faf2e8; border:3px double #8b7355; border-radius:4px;">
+                <div style="text-align:center; padding:20px 15px 12px 15px; border-bottom:3px double #8b7355;">
+                    <img src="${printLogo}" alt="شعار" style="max-height:55px; border:1px solid #8b7355; padding:4px; background:#fff; border-radius:4px;">
+                    <h2 style="margin:8px 0 4px 0; color:#5c4033; font-family:'Georgia',serif; letter-spacing:1px;">${shopSettings.name}</h2>
+                    <div style="font-size:11px; color:#8b7355; font-style:italic;">${shopSettings.address || ''} ${shopSettings.phone ? ' | الهاتف: ' + shopSettings.phone : ''}</div>
+                </div>
+                <div style="padding:15px;">
+                    <div style="text-align:center; margin-bottom:12px;">
+                        <span style="font-size:16px; color:#5c4033; font-weight:bold; letter-spacing:2px; border-bottom:1px solid #8b7355; padding-bottom:4px;">فاتورة مبيعات</span>
+                    </div>
+                    <div style="border:1px solid #c4a882; background:#fff; padding:10px; border-radius:4px; font-size:12px; line-height:2;">
+                        <div style="display:flex; justify-content:space-between;">
+                            <span><b style="color:#5c4033;">اسم العميل:</b> ${custNameText}</span>
+                            <span><b style="color:#5c4033;">رقم الفاتورة:</b> ${invNo}</span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between;">
+                            <span><b style="color:#5c4033;">رقم الهاتف:</b> ${custPhoneText}</span>
+                            <span><b style="color:#5c4033;">طريقة الدفع:</b> ${paymentTypeText}</span>
+                        </div>
+                        <div style="text-align:center; margin-top:4px;"><b style="color:#5c4033;">التاريخ:</b> ${inv.date}</div>
+                    </div>
+                    <table style="width:100%; border-collapse:collapse; margin-top:12px; font-size:12px;">
+                        <tr style="background:#8b7355; color:#fff;">
+                            <th style="padding:7px; border:1px solid #5c4033; font-family:'Georgia',serif;">الصنف</th>
+                            <th style="padding:7px; border:1px solid #5c4033; font-family:'Georgia',serif;">الكمية</th>
+                            <th style="padding:7px; border:1px solid #5c4033; font-family:'Georgia',serif;">السعر</th>
+                            <th style="padding:7px; border:1px solid #5c4033; font-family:'Georgia',serif;">المجموع</th>
+                        </tr>
+                        ${itemsHtml}
+                    </table>
+                    <div style="text-align:left; margin-top:14px; line-height:2; font-size:13px;">
+                        <p style="margin:3px 0; color:#5c4033;">الإجمالي: ${subTexts.join(' + ')}</p>
+                        <p style="margin:3px 0; color:#c0392b;">الخصم: ${discount} ${discountCurr}</p>
+                        <div style="border:2px solid #8b7355; background:#fff; padding:8px 12px; border-radius:4px; margin-top:6px;">
+                            <h4 style="margin:0; color:#5c4033; font-family:'Georgia',serif;">الإجمالي بعد الخصم: <span style="font-size:16px;">${finalTexts.join(' + ')}</span></h4>
+                        </div>
+                    </div>
+                    <div style="text-align:center; margin-top:20px; padding-top:10px; border-top:3px double #8b7355;">
+                        <p style="font-size:12px; color:#8b7355; font-style:italic; margin:0;">${shopSettings.footer}</p>
+                    </div>
+                </div>
+            </div>`;
+        } else {
+            // ===== تصميم 1 - الكلاسيكي الأصلي (مركزي أزرق) =====
+            let logoTag = `<img src="${printLogo}" alt="شعار المحل" style="max-height:55px;">`;
+            html = `
+            <div style="text-align:center; font-family:Tahoma; direction:rtl;">
+                <div style="margin:0 0 6px 0;">${logoTag}</div>
+                <h2 style="color:#1e3c72;">${shopSettings.name}</h2>
+                <p style="font-size:12px;"><b>رقم العميل:</b> ${custPhoneText}</p>
+                <p style="font-size:11px;">${shopSettings.address || ''} ${shopSettings.phone ? ' | الهاتف: ' + shopSettings.phone : ''}</p>
+                <hr>
+                <h3 style="color:#1e3c72;">فاتورة مبيعات</h3>
+                <p><b>اسم العميل:</b> ${custNameText} | <b>رقم الفاتورة:</b> ${invNo}</p>
+                <p><b>طريقة الدفع:</b> <span style="color:#1e3c72; font-weight:bold;">${paymentTypeText}</span> | <b>التاريخ:</b> ${inv.date}</p>
+                <table border="1" style="width:100%; border-collapse:collapse; margin-top:10px;">
+                    <tr><th>الصنف</th><th>الكمية</th><th>السعر</th><th>المجموع</th></tr>
+                    ${itemsHtml}
+                </table>
+                <div style="text-align:left; margin-top:12px; line-height:1.7; font-size:13px;">
+                    <p style="margin:3px 0;">الإجمالي (العملات المختلفة): ${subTexts.join(' + ')}</p>
+                    <p style="margin:3px 0; color:#c0392b;">الخصم: ${discount} ${discountCurr}</p>
+                    <h4 style="margin:5px 0; color:#1e3c72;">الإجمالي بعد الخصم: ${finalTexts.join(' + ')}</h4>
+                </div>
+                <p style="margin-top:20px; font-size:12px; color:#555;">${shopSettings.footer}</p>
+            </div>`;
+        }
+
+        return html;
+    }
+
+    function previewInvoice() {
+        let inv = invoices[currentInvIndex];
+        if(!inv || inv.items.length === 0) { alert('الفاتورة فارغة!'); return; }
+        let html = buildInvoiceHTML(inv, currentInvIndex);
+        lastPreviewInvoiceHtml = html;
+        document.getElementById('preview-modal-content').innerHTML = html;
+        document.getElementById('preview-modal').style.display = 'flex';
+    }
+
+    function buildVoucherHTML(type, title, titleColor, labelField, labelText, amountLabel, amountColor, amount) {
+        let printLogo = shopSettings.customInvoiceLogo || defaultAppLogoSVG;
+        let now = new Date().toLocaleString('ar-EG');
+        let addr = shopSettings.address || '';
+        let phone = shopSettings.phone ? ' | الهاتف: ' + shopSettings.phone : '';
+        let html = `
+            <div style="font-family:Tahoma, sans-serif; direction:rtl; text-align:center; padding:6px;">
+                <div style="margin-bottom:6px;"><img src="${printLogo}" alt="شعار" style="max-height:55px;"></div>
+                <h2 style="color:#1e3c72; margin:2px 0;">${shopSettings.name}</h2>
+                <p style="font-size:11px; color:#555; margin:2px 0;">${addr}${phone}</p>
+                <hr style="border:1px solid #1e3c72;">
+                <div style="background:${titleColor}; color:#fff; padding:10px; border-radius:8px; margin:10px 0;">
+                    <h3 style="margin:0; font-size:20px; letter-spacing:1px;">${title}</h3>
+                </div>
+                <div style="background:#f8f9fa; border:1px solid #ddd; border-radius:8px; padding:12px; font-size:13px; line-height:2; text-align:right;">
+                    <p style="margin:4px 0;"><b>${labelField}:</b> ${labelText}</p>
+                    <p style="margin:4px 0;"><b>${amountLabel}:</b> <span style="font-size:18px; color:${amountColor}; font-weight:bold;">${amount}</span></p>
+                    <p style="margin:4px 0;"><b>التاريخ:</b> ${now}</p>
+                </div>
+                <div style="display:flex; justify-content:space-between; margin-top:30px; font-size:12px; color:#333;">
+                    <div style="text-align:center; flex:1;">
+                        <div style="border-top:1px solid #333; padding-top:4px; width:80%; margin:0 auto;">توقيع المسؤول</div>
+                    </div>
+                    <div style="text-align:center; flex:1;">
+                        <div style="border-top:1px solid #333; padding-top:4px; width:80%; margin:0 auto;">توقيع المستلم</div>
+                    </div>
+                </div>
+                <hr style="border:1px dashed #aaa; margin-top:18px;">
+                <p style="margin-top:10px; font-size:12px; color:#555;">${shopSettings.footer}</p>
+            </div>
+        `;
+        return html;
+    }
+
+    function previewPaymentVoucher() {
+        let name = document.getElementById('pay-vouch-name').value.trim();
+        let amount = parseFloat(document.getElementById('pay-vouch-amount').value) || 0;
+        let curr = document.getElementById('pay-vouch-curr').value;
+
+        if(!name || amount <= 0) { alert('الرجاء إدخال اسم المستفيد ومبلغ صحيح للمعاينة.'); return; }
+
+        let html = buildVoucherHTML('pay', 'سند صرف', '#c0392b', 'المستفيد', name, 'المبلغ المصروف', '#c0392b', amount + ' ' + curr);
+        lastPreviewInvoiceHtml = html;
+        document.getElementById('preview-modal-content').innerHTML = html;
+        document.getElementById('preview-modal').style.display = 'flex';
+    }
+
+    function previewVoucher() {
+        let name = document.getElementById('vouch-name').value.trim();
+        let amount = parseFloat(document.getElementById('vouch-amount').value) || 0;
+        let curr = document.getElementById('vouch-curr').value;
+
+        if(!name || amount <= 0) { alert('الرجاء إدخال اسم العميل ومبلغ قسط صحيح للمعاينة.'); return; }
+
+        let html = buildVoucherHTML('rec', 'سند قبض', '#27ae60', 'العميل', name, 'المبلغ المقبوض', '#27ae60', amount + ' ' + curr);
+        lastPreviewInvoiceHtml = html;
+        document.getElementById('preview-modal-content').innerHTML = html;
+        document.getElementById('preview-modal').style.display = 'flex';
+    }
+
+    function previewDebt() {
+        let name = document.getElementById('debt-name').value.trim();
+        let amount = parseFloat(document.getElementById('debt-amount').value) || 0;
+        let curr = document.getElementById('debt-curr').value;
+
+        if(!name || amount <= 0) { alert('الرجاء إدخال بيانات الدين للمعاينة.'); return; }
+
+        let html = buildVoucherHTML('debt', 'الديون', '#e67e22', 'المدين', name, 'قيمة الدين', '#e67e22', amount + ' ' + curr);
+        lastPreviewInvoiceHtml = html;
+        document.getElementById('preview-modal-content').innerHTML = html;
+        document.getElementById('preview-modal').style.display = 'flex';
+    }
+
+    function closePreviewModal() {
+        document.getElementById('preview-modal').style.display = 'none';
+    }
+
+    // ===== شرح التطبيق بالصور =====
+    let tutorialSteps = [
+        { title: '1️⃣ تسجيل الدخول وإنشاء حساب', desc: 'أدخل بريدك الإلكتروني وكلمة المرور ثم اضغط "تسجيل الدخول". إذا لم يكن لديك حساب، اضغط "إنشاء حساب جديد" واملأ بياناتك.', img: 'tutorial/step1.jpg' },
+        { title: '2️⃣ تبويب الكاشير - نقطة البيع', desc: 'في تبويب الكاشير، ابحث عن المنتج بالاسم أو الباركود، أو استخدم ماسح الباركود بالكاميرا. اضغط على المنتج لإضافته للفاتورة.', img: 'tutorial/step2.jpg' },
+        { title: '3️⃣ إضافة المنتجات للفاتورة', desc: 'عند الضغط على المنتج يُضاف للفاتورة تلقائياً. يمكنك تعديل الكمية والسعر. أدخل اسم العميل ورقمه.', img: 'tutorial/step3.jpg' },
+        { title: '4️⃣ الدفع - نقدي / شبكة / آجل', desc: 'اضغط "نقدي" للدفع نقداً، "شبكة" للبطاقة، أو "آجل" لتسجيل دين. عند الآجل تظهر رسالة بالأصناف والمبلغ المتبقي.', img: 'tutorial/step4.jpg' },
+        { title: '5️⃣ طباعة الفاتورة', desc: 'اضغط زر "طباعة" للانتقال مباشرة للطابعة. تظهر الفاتورة بالشعار واسم المحل واسم العميل والأصناف والإجمالي.', img: 'tutorial/step5.jpg' },
+        { title: '6️⃣ تبويب المشتريات', desc: 'سجّل المشتريات من الموردين بإدخال اسم المورد والمبلغ والعملة. تُحتسب تلقائياً في الأرباح.', img: 'tutorial/step6.jpg' },
+        { title: '7️⃣ سند قبض (تقصيد الديون)', desc: 'عند دفع العميل جزءاً من دينه، سجّل سند قبض. تظهر رسالة بالمبلغ المتبقي عليه وبأي عملة.', img: 'tutorial/step7.jpg' },
+        { title: '8️⃣ سند صرف', desc: 'سجّل المصروفات النقدية كالإيجار والرواتب وغيرها. تُخصم من الأرباح تلقائياً.', img: 'tutorial/step8.jpg' },
+        { title: '9️⃣ تبويب الديون', desc: 'عرض جميع الديون والآجال. يمكنك تسديد دين كامل أو حذفه. يُظهر الإجمالي بالعملات المختلفة.', img: 'tutorial/step9.jpg' },
+        { title: '🔟 تبويب المخزون', desc: 'أضف منتجات جديدة مع الباركود وسعر الشراء وسعر البيع والكمية. عدّل أو احذف المنتجات.', img: 'tutorial/step10.jpg' },
+        { title: '1️⃣1️⃣ تبويب الصلاحية', desc: 'تابع تواريخ انتهاء صلاحية المنتجات لتنبيهك قبل الانتهاء.', img: 'tutorial/step11.jpg' },
+        { title: '1️⃣2️⃣ تبويب الأرباح والعجز', desc: 'عرض الأرباح الإجمالية والشهرية والسنوية ومربع العجز. اطبع تقرير اليوم كله بزر مخصص.', img: 'tutorial/step12.jpg' },
+        { title: '1️⃣3️⃣ الإعدادات', desc: 'في الإعدادات: اسم المحل (يظهر في الفاتورة فقط)، العنوان، الهاتف، الشعار المخصص، ونص تذييل الفاتورة.', img: 'tutorial/step13.jpg' }
+    ];
+    let currentTutorialStep = 0;
+
+    function openTutorialModal() {
+        currentTutorialStep = 0;
+        renderTutorialStep();
+        document.getElementById('tutorial-modal').style.display = 'flex';
+    }
+
+    function closeTutorialModal() {
+        document.getElementById('tutorial-modal').style.display = 'none';
+    }
+
+    function renderTutorialStep() {
+        let step = tutorialSteps[currentTutorialStep];
+        let content = document.getElementById('tutorial-content');
+        content.innerHTML = `
+            <h4 style="color:#1e3c72; margin-bottom:10px; font-size:16px;">${step.title}</h4>
+            <div style="background:#f8f9fa; border:2px dashed #bdc3c7; border-radius:8px; padding:15px; margin-bottom:15px; min-height:200px; display:flex; align-items:center; justify-content:center;">
+                <img src="${step.img}" alt="${step.title}" style="max-width:100%; max-height:350px; border-radius:6px;" onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=&quot;color:#95a5a6; font-size:14px;&quot;>📷 ضع صورة الشرح هنا<br><small>${step.img}</small></div>'">
+            </div>
+            <p style="font-size:14px; color:#2c3e50; line-height:1.8; text-align:right; padding:0 10px;">${step.desc}</p>
+        `;
+        document.getElementById('tutorial-counter').innerText = (currentTutorialStep + 1) + ' / ' + tutorialSteps.length;
+        document.getElementById('tutorial-prev-btn').style.opacity = currentTutorialStep === 0 ? '0.4' : '1';
+        document.getElementById('tutorial-next-btn').style.opacity = currentTutorialStep === tutorialSteps.length - 1 ? '0.4' : '1';
+    }
+
+    function tutorialNext() {
+        if(currentTutorialStep < tutorialSteps.length - 1) {
+            currentTutorialStep++;
+            renderTutorialStep();
+        }
+    }
+
+    function tutorialPrev() {
+        if(currentTutorialStep > 0) {
+            currentTutorialStep--;
+            renderTutorialStep();
+        }
+    }
+
+    let lastPreviewInvoiceHtml = "";
+    function printInvoiceFromPreview() {
+        if(lastPreviewInvoiceHtml) {
+            document.getElementById('printable-invoice').innerHTML = lastPreviewInvoiceHtml;
+        }
+        let modeSel = document.getElementById('printer-mode');
+        let mode = modeSel ? modeSel.value : 'normal';
+        document.getElementById('app-body').className = mode === 'thermal' ? 'print-mode-thermal' : 'print-mode-normal';
+        window.print();
+        document.getElementById('app-body').className = '';
+    }
+
+    function printInvoice() { previewInvoice(); printInvoiceFromPreview(); }
+    function printInvoiceDirect() {
+        let inv = invoices[currentInvIndex];
+        if(!inv || inv.items.length === 0) { alert('الفاتورة فارغة!'); return; }
+        previewInvoice();
+        closePreviewModal();
+        printInvoiceFromPreview();
+    }
+
+    /* ===== دوال حفظ الفاتورة / السند كملف PDF ===== */
+    function saveInvoiceAsPDF(filename) {
+        if(!lastPreviewInvoiceHtml) { alert('لا توجد فاتورة للحفظ!'); return; }
+        if(typeof html2pdf === 'undefined') { alert('مكتبة PDF غير محمّلة. اعد تحميل الصفحة.'); return; }
+        let container = document.createElement('div');
+        container.style.background = '#ffffff';
+        container.style.padding = '10px';
+        container.innerHTML = lastPreviewInvoiceHtml;
+        let modeSel = document.getElementById('printer-mode');
+        let mode = modeSel ? modeSel.value : 'normal';
+        let opt = {
+            margin: mode === 'thermal' ? 2 : 10,
+            filename: filename || ('فاتورة_' + new Date().toISOString().slice(0,10) + '.pdf'),
+            image: { type: 'jpeg', quality: 0.95 },
+            html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+            jsPDF: { unit: 'mm', format: mode === 'thermal' ? [80, 297] : 'a4', orientation: 'portrait' },
+            pagebreak: { mode: ['css', 'legacy'] }
+        };
+        html2pdf().set(opt).from(container).save().catch(function(e){ alert('حدث خطأ أثناء إنشاء PDF: ' + e); });
+    }
+
+    function printInvoiceDirectPDF() {
+        let inv = invoices[currentInvIndex];
+        if(!inv || inv.items.length === 0) { alert('الفاتورة فارغة!'); return; }
+        previewInvoice();
+        closePreviewModal();
+        saveInvoiceAsPDF();
+    }
+
+    function printVoucherPDF() { previewVoucher(); closePreviewModal(); saveInvoiceAsPDF('سند_قبض.pdf'); }
+    function printPaymentVoucherPDF() { previewPaymentVoucher(); closePreviewModal(); saveInvoiceAsPDF('سند_صرف.pdf'); }
+    function printDebtPDF() { previewDebt(); closePreviewModal(); saveInvoiceAsPDF('الديون.pdf'); }
+
+    function printSavedVoucherPDF(id, kind) {
+        let rec;
+        if(kind === 'pay') {
+            rec = paymentVouchersRecords.find(v => v.id === id);
+            if(!rec) return;
+            let html = buildVoucherHTML('pay', 'سند صرف', '#c0392b', 'المستفيد', rec.name, 'المبلغ المصروف', '#c0392b', rec.amount + ' ' + rec.curr);
+            html = html.replace('<p style="margin:4px 0;"><b>التاريخ:</b> ' + new Date().toLocaleString('ar-EG') + '</p>', '<p style="margin:4px 0;"><b>التاريخ:</b> ' + rec.date + '</p>');
+            lastPreviewInvoiceHtml = html;
+            saveInvoiceAsPDF('سند_صرف_' + id + '.pdf');
+        } else {
+            rec = vouchersRecords.find(v => v.id === id);
+            if(!rec) return;
+            let html = buildVoucherHTML('rec', 'سند قبض', '#27ae60', 'العميل', rec.name, 'المبلغ المقبوض', '#27ae60', rec.amount + ' ' + rec.curr);
+            html = html.replace('<p style="margin:4px 0;"><b>التاريخ:</b> ' + new Date().toLocaleString('ar-EG') + '</p>', '<p style="margin:4px 0;"><b>التاريخ:</b> ' + rec.date + '</p>');
+            lastPreviewInvoiceHtml = html;
+            saveInvoiceAsPDF('سند_قبض_' + id + '.pdf');
+        }
+    }
+
+    function printSavedDebtPDF(id) {
+        let d = debtsRecords.find(x => x.id === id);
+        if(!d) return;
+        let totalsTextArr = [];
+        for(let curr in d.subtotalByCurr) {
+            let finalVal = d.subtotalByCurr[curr];
+            if(curr === d.discountCurr && d.discount) finalVal -= d.discount;
+            if(finalVal < 0) finalVal = 0;
+            if(finalVal > 0) totalsTextArr.push(finalVal + ' ' + curr);
+        }
+        let amountStr = totalsTextArr.length > 0 ? totalsTextArr.join(' + ') : '0';
+        let html = buildVoucherHTML('debt', 'الديون', '#e67e22', 'المدين', d.custName, 'قيمة الدين', '#e67e22', amountStr);
+        html = html.replace('<p style="margin:4px 0;"><b>التاريخ:</b> ' + new Date().toLocaleString('ar-EG') + '</p>', '<p style="margin:4px 0;"><b>التاريخ:</b> ' + d.date + '</p>');
+        lastPreviewInvoiceHtml = html;
+        saveInvoiceAsPDF('الديون_' + id + '.pdf');
+    }
+    function printVoucherDoc() {
+        if(lastPreviewInvoiceHtml) {
+            document.getElementById('printable-invoice').innerHTML = lastPreviewInvoiceHtml;
+        }
+        let modeSel = document.getElementById('printer-mode');
+        let mode = modeSel ? modeSel.value : 'normal';
+        document.getElementById('app-body').className = mode === 'thermal' ? 'print-mode-thermal' : 'print-mode-normal';
+        window.print();
+        document.getElementById('app-body').className = '';
+    }
+    function printPaymentVoucher() { previewPaymentVoucher(); closePreviewModal(); printVoucherDoc(); }
+    function printVoucher() { previewVoucher(); closePreviewModal(); printVoucherDoc(); }
+    function printDebt() { previewDebt(); closePreviewModal(); printVoucherDoc(); }
+
+    function printSavedVoucher(id, kind) {
+        let rec;
+        if(kind === 'pay') {
+            rec = paymentVouchersRecords.find(v => v.id === id);
+            if(!rec) return;
+            let html = buildVoucherHTML('pay', 'سند صرف', '#c0392b', 'المستفيد', rec.name, 'المبلغ المصروف', '#c0392b', rec.amount + ' ' + rec.curr);
+            html = html.replace('<p style="margin:4px 0;"><b>التاريخ:</b> ' + new Date().toLocaleString('ar-EG') + '</p>', '<p style="margin:4px 0;"><b>التاريخ:</b> ' + rec.date + '</p>');
+            lastPreviewInvoiceHtml = html;
+        } else {
+            rec = vouchersRecords.find(v => v.id === id);
+            if(!rec) return;
+            let html = buildVoucherHTML('rec', 'سند قبض', '#27ae60', 'العميل', rec.name, 'المبلغ المقبوض', '#27ae60', rec.amount + ' ' + rec.curr);
+            html = html.replace('<p style="margin:4px 0;"><b>التاريخ:</b> ' + new Date().toLocaleString('ar-EG') + '</p>', '<p style="margin:4px 0;"><b>التاريخ:</b> ' + rec.date + '</p>');
+            lastPreviewInvoiceHtml = html;
+        }
+        printVoucherDoc();
+    }
+
+    function printSavedDebt(id) {
+        let d = debtsRecords.find(x => x.id === id);
+        if(!d) return;
+        let totalsTextArr = [];
+        for(let curr in d.subtotalByCurr) {
+            let finalVal = d.subtotalByCurr[curr];
+            if(curr === d.discountCurr && d.discount) finalVal -= d.discount;
+            if(finalVal < 0) finalVal = 0;
+            if(finalVal > 0) totalsTextArr.push(finalVal + ' ' + curr);
+        }
+        let amountStr = totalsTextArr.length > 0 ? totalsTextArr.join(' + ') : '0';
+        let html = buildVoucherHTML('debt', 'الديون', '#e67e22', 'المدين', d.custName, 'قيمة الدين', '#e67e22', amountStr);
+        html = html.replace('<p style="margin:4px 0;"><b>التاريخ:</b> ' + new Date().toLocaleString('ar-EG') + '</p>', '<p style="margin:4px 0;"><b>التاريخ:</b> ' + d.date + '</p>');
+        lastPreviewInvoiceHtml = html;
+        printVoucherDoc();
+    }
+
+    function recordCompletedSale(inv, type, displayIndex) {
+        let subtotalByCurr = {}, totalCostByCurr = {};
+        inv.items.forEach(i => {
+            let itemTotal = i.price * i.qty;
+            subtotalByCurr[i.curr] = (subtotalByCurr[i.curr] || 0) + itemTotal;
+            let pObj = products.find(prod => prod.id === i.id);
+            let bPrice = pObj ? pObj.buyPrice : (i.buyPrice || 0);
+            totalCostByCurr[i.curr] = (totalCostByCurr[i.curr] || 0) + (bPrice * i.qty);
+        });
+        let discount = inv.discount || 0;
+        let discountCurr = inv.discountCurr || "ريال يمني";
+        if(subtotalByCurr[discountCurr]) {
+            subtotalByCurr[discountCurr] -= discount;
+            if(subtotalByCurr[discountCurr] < 0) subtotalByCurr[discountCurr] = 0;
+        }
+        completedSalesRecords.push({ 
+            id: Date.now(), 
+            displayNum: displayIndex, 
+            custName: inv.custName || (currentLang === 'ar' ? 'عميل كاشير' : 'Cashier Customer'), 
+            subtotalByCurr, 
+            totalCostByCurr, 
+            type: type, 
+            date: inv.date,
+            timestamp: Date.now()
+        });
+        saveUserData();
+    }
+
+    function deleteCompletedSaleRecord(id) {
+        if(confirm(currentLang === 'ar' ? 'هل أنت متأكد من حذف هذه الفاتورة وسجل أرباحها؟' : 'Delete this sale record?')) {
+            completedSalesRecords = completedSalesRecords.filter(rec => rec.id !== id);
+            saveUserData();
+            renderProfitsReport();
+            alert(currentLang === 'ar' ? 'تم حذف السجل بنجاح.' : 'Record deleted successfully.');
+        }
+    }
+
+    function renderExpiryTable() {
+        let tbody = document.getElementById('expiry-table-body');
+        tbody.innerHTML = '';
+
+        let today = new Date('2026-08-10');
+        today.setHours(0,0,0,0);
+
+        let filtered = products.filter(p => p.expDate);
+
+        if(filtered.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">${currentLang === 'ar' ? 'لا توجد تواريخ صلاحية مسجلة للمنتجات' : 'No expiration dates recorded'}</td></tr>`;
+            return;
+        }
+
+        filtered.forEach(p => {
+            let exp = new Date(p.expDate);
+            exp.setHours(0,0,0,0);
+
+            let diffTime = exp - today;
+            let diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            let statusText = "";
+            let rowStyle = "";
+
+            if(diffDays < 0) {
+                statusText = currentLang === 'ar' ? "لقد انتهى" : "Expired";
+                rowStyle = "background-color: #f8d7da; color: #721c24; font-weight: bold;";
+            } else if(diffDays <= 15) {
+                statusText = currentLang === 'ar' ? `قريب الانتهاء (باقي ${diffDays} يوم)` : `Expiring soon (${diffDays} days left)`;
+                rowStyle = "background-color: #fff3cd; color: #856404; font-weight: bold;";
+            } else {
+                statusText = currentLang === 'ar' ? `سليم (باقي ${diffDays} يوم)` : `Valid (${diffDays} days left)`;
+            }
+
+            tbody.innerHTML += `<tr style="${rowStyle}">
+                <td>${p.name}</td>
+                <td>${p.qty}</td>
+                <td>${p.buyPrice} ${p.curr}</td>
+                <td>${p.price} ${p.curr}</td>
+                <td>${p.expDate}</td>
+                <td>${statusText}</td>
+            </tr>`;
+        });
+    }
+
+    function renderProfitsReport() {
+        let tbody = document.getElementById('profits-table-body');
+        tbody.innerHTML = '';
+        
+        let globalSalesObj = {}, globalCostObj = {};
+        let monthNetObj = {}, yearNetObj = {};
+        
+        let nowDate = new Date();
+        let curMonth = nowDate.getMonth() + 1;
+        let curYear = nowDate.getFullYear();
+        let fullDateStr = nowDate.toLocaleDateString('ar-EG');
+
+        if(currentLang === 'ar') {
+            document.getElementById('month-profit-title').innerText = `أرباح شهر (${curMonth}) - تاريخ اليوم: ${fullDateStr}`;
+            document.getElementById('year-profit-title').innerText = `أرباح سنة: (${curYear})`;
+        } else {
+            document.getElementById('month-profit-title').innerText = `Month Profits (${curMonth}) - Today: ${fullDateStr}`;
+            document.getElementById('year-profit-title').innerText = `Year Profits: (${curYear})`;
+        }
+
+        completedSalesRecords.forEach(rec => {
+            let recDate = rec.timestamp ? new Date(rec.timestamp) : new Date();
+            let salesStr = [], costStr = [], netStr = [];
+            
+            for(let curr in rec.subtotalByCurr) {
+                let s = rec.subtotalByCurr[curr];
+                let c = rec.totalCostByCurr[curr] || 0;
+                let n = s - c;
+                
+                salesStr.push(`${s} ${curr}`);
+                costStr.push(`${c} ${curr}`);
+                netStr.push(`${n} ${curr}`);
+                
+                globalSalesObj[curr] = (globalSalesObj[curr] || 0) + s;
+                globalCostObj[curr] = (globalCostObj[curr] || 0) + c;
+
+                if((recDate.getMonth() + 1) === curMonth && recDate.getFullYear() === curYear) {
+                    monthNetObj[curr] = (monthNetObj[curr] || 0) + n;
+                }
+                if(recDate.getFullYear() === curYear) {
+                    yearNetObj[curr] = (yearNetObj[curr] || 0) + n;
+                }
+            }
+
+            let invWord = currentLang === 'ar' ? 'فاتورة #' : 'Invoice #';
+            let deleteBtnText = currentLang === 'ar' ? '🗑️ حذف' : '🗑️ Delete';
+
+            tbody.innerHTML += `<tr>
+                <td>${invWord}${rec.displayNum}</td>
+                <td>${rec.custName}</td>
+                <td><span style="background:#eef2f7; padding:2px 6px; border-radius:4px; font-weight:bold;">${rec.type}</span></td>
+                <td>${salesStr.join(' + ')}</td>
+                <td>${costStr.join(' + ') || '0'}</td>
+                <td style="font-weight:bold; color:#27ae60;">${netStr.join(' + ')}</td>
+                <td>${rec.date}</td>
+                <td style="text-align:center;"><button onclick="deleteCompletedSaleRecord(${rec.id})" style="background:#c0392b; color:#fff; border:none; padding:3px 6px; border-radius:4px; cursor:pointer; font-size:10px;">${deleteBtnText}</button></td>
+            </tr>`;
+        });
+
+        let sArr = [], cArr = [], pArr = [], purchArr = [], expArr = [];
+        let totalPurchasesSum = {};
+        let totalExpensesSum = {};
+        // مجموعات خاصة بالشهر الحالي فقط (لمطابقة حساب أرباح الشهر في العجز)
+        let monthPurchasesSum = {};
+        let monthExpensesSum = {};
+
+        purchasesRecords.forEach(pr => {
+            // نقد: تُحتسب بالكامل | آجل: تُحتسب فقط بقيمة ما تم تسديده (amount - remainingDebt)
+            let countedAmount = pr.method === 'آجل' ? (pr.amount - (pr.remainingDebt || 0)) : pr.amount;
+            if(countedAmount > 0) {
+                totalPurchasesSum[pr.curr] = (totalPurchasesSum[pr.curr] || 0) + countedAmount;
+                // تصفية حسب الشهر والسنة الحالية
+                let prDate = pr.timestamp ? new Date(pr.timestamp) : new Date();
+                if((prDate.getMonth() + 1) === curMonth && prDate.getFullYear() === curYear) {
+                    monthPurchasesSum[pr.curr] = (monthPurchasesSum[pr.curr] || 0) + countedAmount;
+                }
+            }
+        });
+
+        paymentVouchersRecords.forEach(pv => {
+            totalExpensesSum[pv.curr] = (totalExpensesSum[pv.curr] || 0) + pv.amount;
+            // تصفية حسب الشهر والسنة الحالية
+            let pvDate = pv.timestamp ? new Date(pv.timestamp) : new Date();
+            if((pvDate.getMonth() + 1) === curMonth && pvDate.getFullYear() === curYear) {
+                monthExpensesSum[pv.curr] = (monthExpensesSum[pv.curr] || 0) + pv.amount;
+            }
+        });
+
+        for(let curr in globalSalesObj) sArr.push(`${globalSalesObj[curr]} ${curr}`);
+        for(let curr in globalCostObj) cArr.push(`${globalCostObj[curr]} ${curr}`);
+        for(let curr in totalPurchasesSum) purchArr.push(`${totalPurchasesSum[curr]} ${curr}`);
+        for(let curr in totalExpensesSum) expArr.push(`${totalExpensesSum[curr]} ${curr}`);
+
+        let netFinalObj = {};
+        for(let curr in globalSalesObj) {
+            let sVal = globalSalesObj[curr];
+            let cVal = globalCostObj[curr] || 0;
+            netFinalObj[curr] = sVal - cVal;
+        }
+
+        let netArr = [];
+        for(let curr in netFinalObj) netArr.push(`${netFinalObj[curr]} ${curr}`);
+
+        let monthArr = [];
+        for(let curr in monthNetObj) monthArr.push(`${monthNetObj[curr]} ${curr}`);
+
+        let yearArr = [];
+        for(let curr in yearNetObj) yearArr.push(`${yearNetObj[curr]} ${curr}`);
+
+        document.getElementById('prof-total-sales').innerText = sArr.length > 0 ? sArr.join(' + ') : '0';
+        document.getElementById('prof-total-cost').innerText = cArr.length > 0 ? cArr.join(' + ') : '0';
+        document.getElementById('prof-total-purchases').innerText = purchArr.length > 0 ? purchArr.join(' + ') : '0';
+        document.getElementById('prof-total-expenses').innerText = expArr.length > 0 ? expArr.join(' + ') : '0';
+        document.getElementById('prof-total-net').innerText = netArr.length > 0 ? netArr.join(' + ') : '0';
+        document.getElementById('prof-month-net').innerText = monthArr.length > 0 ? monthArr.join(' + ') : '0';
+        document.getElementById('prof-year-net').innerText = yearArr.length > 0 ? yearArr.join(' + ') : '0';
+
+        // ===== حساب العجز (الخسارة) للشهر الحالي تلقائياً =====
+        // العجز = المصروفات + المشتريات - صافي أرباح الشهر (إذا كان سالباً فهناك عجز)
+        let monthDeficitObj = {};
+        let deficitDetailsObj = {}; // تفصيل مصدر العجز لكل عملة
+        let allCurrs = new Set([...Object.keys(monthNetObj), ...Object.keys(monthPurchasesSum), ...Object.keys(monthExpensesSum)]);
+        allCurrs.forEach(c => {
+            let monthProfit = monthNetObj[c] || 0;
+            let monthPurchases = monthPurchasesSum[c] || 0;
+            let monthExpenses = monthExpensesSum[c] || 0;
+            // العجز الحقيقي = (المصاريف + المشتريات للشهر) - صافي أرباح الشهر
+            let deficit = (monthPurchases + monthExpenses) - monthProfit;
+            if(deficit > 0) {
+                monthDeficitObj[c] = deficit;
+                deficitDetailsObj[c] = { purchases: monthPurchases, expenses: monthExpenses, profit: monthProfit, deficit: deficit };
+            }
+        });
+
+        let deficitArr = [];
+        for(let curr in monthDeficitObj) deficitArr.push(`${monthDeficitObj[curr]} ${curr}`);
+        let deficitBox = document.getElementById('prof-deficit-amount');
+        let oldDeficitBox = document.getElementById('prof-deficit-box');
+        if(deficitArr.length > 0) {
+            deficitBox.innerText = deficitArr.join(' + ');
+            deficitBox.style.color = '#e74c3c';
+            // عرض ملخص مصدر العجز في المربع الصغير
+            let extraInfoEl = document.getElementById('deficit-extra-info');
+            if(extraInfoEl) {
+                extraInfoEl.innerText = 'من: مصاريف + مشتريات - أرباح الشهر';
+            }
+            if(oldDeficitBox) {
+                oldDeficitBox.style.display = 'block';
+                // بناء تفصيل يوضح من أين أتى العجز لكل عملة
+                let detailLines = [];
+                for(let curr in deficitDetailsObj) {
+                    let d = deficitDetailsObj[curr];
+                    let line = '💰 العملة: ' + curr + ' — العجز = (' + d.expenses + ' مصاريف + ' + d.purchases + ' مشتريات) - ' + d.profit + ' أرباح الشهر = ' + d.deficit + ' ' + curr;
+                    detailLines.push(line);
+                }
+                let headerMsg = (currentLang === 'ar'
+                    ? '⚠️ يوجد عجز (خسارة) هذا الشهر بمبلغ: <span style="color:#e74c3c;">' + deficitArr.join(' + ') + '</span>'
+                    : '⚠️ Deficit this month: <span style="color:#e74c3c;">' + deficitArr.join(' + ') + '</span>');
+                oldDeficitBox.innerHTML = '<div style="font-weight:bold; margin-bottom:6px;">' + headerMsg + '</div>'
+                    + '<div style="margin-top:6px; font-weight:bold; color:#78281f;">📌 من أين أتى العجز (تفصيل المصدر):</div>'
+                    + '<div style="margin-top:4px; line-height:1.7;">' + detailLines.join('<br>') + '</div>'
+                    + '<div style="margin-top:6px; color:#922b21; font-size:11px;">ℹ️ أي: زادت المصاريف والمشتريات عن صافي أرباح الشهر الحالي، فالفرق هو العجز (الخسارة).</div>';
+            }
+        } else {
+            deficitBox.innerText = currentLang === 'ar' ? 'لا يوجد عجز ✅' : 'No deficit ✅';
+            deficitBox.style.color = '#27ae60';
+            if(oldDeficitBox) oldDeficitBox.style.display = 'none';
+            let extraInfoElHide = document.getElementById('deficit-extra-info');
+            if(extraInfoElHide) extraInfoElHide.innerText = '';
+        }
+    }
+
+    // ===== طباعة تقرير اليوم كله (يبدأ من جديد بعد منتصف الليل) =====
+    function printDailyReport() {
+        let now = new Date();
+        let todayStr = now.toLocaleDateString('ar-EG');
+        let todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+        let todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+
+        // فلترة مبيعات اليوم فقط (باستخدام timestamp - كل يوم يبدأ تقرير جديد بعد 12)
+        let todaySales = completedSalesRecords.filter(rec => {
+            let ts = rec.timestamp || 0;
+            return ts >= todayStart.getTime() && ts <= todayEnd.getTime();
+        });
+
+        // فلترة المشتريات اليوم
+        let todayPurchases = purchasesRecords.filter(p => {
+            let ts = p.timestamp || 0;
+            return ts >= todayStart.getTime() && ts <= todayEnd.getTime();
+        });
+
+        // فلترة سندات الصرف اليوم
+        let todayExpenses = paymentVouchersRecords.filter(pv => {
+            let ts = pv.timestamp || 0;
+            return ts >= todayStart.getTime() && ts <= todayEnd.getTime();
+        });
+
+        // فلترة الديون (الآجل) اليوم
+        let todayDebts = debtsRecords.filter(d => {
+            let ts = d.id || 0;
+            return ts >= todayStart.getTime() && ts <= todayEnd.getTime();
+        });
+
+        // حساب الإجماليات
+        let daySalesObj = {}, dayCostObj = {}, dayNetObj = {};
+        todaySales.forEach(rec => {
+            for(let curr in rec.subtotalByCurr) {
+                let s = rec.subtotalByCurr[curr];
+                let c = rec.totalCostByCurr ? (rec.totalCostByCurr[curr] || 0) : 0;
+                daySalesObj[curr] = (daySalesObj[curr] || 0) + s;
+                dayCostObj[curr] = (dayCostObj[curr] || 0) + c;
+                dayNetObj[curr] = (dayNetObj[curr] || 0) + (s - c);
+            }
+        });
+
+        let dayPurchObj = {}, dayExpObj = {};
+        todayPurchases.forEach(p => { dayPurchObj[p.curr] = (dayPurchObj[p.curr] || 0) + p.amount; });
+        todayExpenses.forEach(pv => { dayExpObj[pv.curr] = (dayExpObj[pv.curr] || 0) + pv.amount; });
+
+        // بناء نصوص الإجماليات
+        let salesArr = Object.keys(daySalesObj).map(c => daySalesObj[c] + ' ' + c);
+        let costArr = Object.keys(dayCostObj).map(c => dayCostObj[c] + ' ' + c);
+        let netArr = Object.keys(dayNetObj).map(c => dayNetObj[c] + ' ' + c);
+        let purchArr = Object.keys(dayPurchObj).map(c => dayPurchObj[c] + ' ' + c);
+        let expArr = Object.keys(dayExpObj).map(c => dayExpObj[c] + ' ' + c);
+
+        let isAr = currentLang === 'ar';
+        let shopName = shopSettings.name || 'قافلة الصحراء';
+        let logoHtml = shopSettings.customInvoiceLogo 
+            ? '<img src="' + shopSettings.customInvoiceLogo + '" style="max-height:60px; margin-bottom:8px;" />'
+            : '<img src="' + defaultAppLogoSVG + '" style="max-height:60px; margin-bottom:8px;" />';
+
+        // بناء صفوف جدول المبيعات
+        let salesRows = '';
+        if(todaySales.length === 0) {
+            salesRows = '<tr><td colspan="6" style="text-align:center; padding:10px;">' + (isAr ? 'لا توجد مبيعات مسجلة اليوم' : 'No sales recorded today') + '</td></tr>';
+        } else {
+            todaySales.forEach(rec => {
+                let salesStr = [], costStr = [], netStr = [];
+                for(let curr in rec.subtotalByCurr) {
+                    let s = rec.subtotalByCurr[curr];
+                    let c = rec.totalCostByCurr ? (rec.totalCostByCurr[curr] || 0) : 0;
+                    salesStr.push(s + ' ' + curr);
+                    costStr.push(c + ' ' + curr);
+                    netStr.push((s - c) + ' ' + curr);
+                }
+                salesRows += '<tr>' +
+                    '<td>' + (isAr ? 'فاتورة #' : 'Invoice #') + rec.displayNum + '</td>' +
+                    '<td>' + (rec.custName || '') + '</td>' +
+                    '<td>' + (rec.type || '') + '</td>' +
+                    '<td>' + salesStr.join(' + ') + '</td>' +
+                    '<td>' + costStr.join(' + ') + '</td>' +
+                    '<td style="font-weight:bold; color:#27ae60;">' + netStr.join(' + ') + '</td>' +
+                    '</tr>';
+            });
+        }
+
+        // بناء صفوف المشتريات
+        let purchRows = '';
+        if(todayPurchases.length === 0) {
+            purchRows = '<tr><td colspan="3" style="text-align:center; padding:10px;">' + (isAr ? 'لا توجد مشتريات اليوم' : 'No purchases today') + '</td></tr>';
+        } else {
+            todayPurchases.forEach(p => {
+                purchRows += '<tr><td>' + p.name + '</td><td>' + p.amount + ' ' + p.curr + '</td><td>' + p.date + '</td></tr>';
+            });
+        }
+
+        // بناء صفوف المصروفات
+        let expRows = '';
+        if(todayExpenses.length === 0) {
+            expRows = '<tr><td colspan="3" style="text-align:center; padding:10px;">' + (isAr ? 'لا توجد مصروفات اليوم' : 'No expenses today') + '</td></tr>';
+        } else {
+            todayExpenses.forEach(pv => {
+                expRows += '<tr><td>' + (pv.name || '') + '</td><td>' + pv.amount + ' ' + pv.curr + '</td><td>' + pv.date + '</td></tr>';
+            });
+        }
+
+        // بناء صفوف الديون (الآجل)
+        let debtRows = '';
+        if(todayDebts.length === 0) {
+            debtRows = '<tr><td colspan="4" style="text-align:center; padding:10px;">' + (isAr ? 'لا توجد ديون اليوم' : 'No debts today') + '</td></tr>';
+        } else {
+            todayDebts.forEach(d => {
+                let amounts = Object.keys(d.subtotalByCurr).map(c => d.subtotalByCurr[c] + ' ' + c).join(' + ');
+                let itemsCount = d.items ? d.items.length : 0;
+                debtRows += '<tr><td>' + (d.custName || '') + '</td><td>' + (d.custPhone || '') + '</td><td>' + itemsCount + ' ' + (isAr ? 'صنف' : 'items') + '</td><td>' + amounts + '</td></tr>';
+            });
+        }
+
+        // بناء HTML التقرير
+        let reportHtml = '<div class="print-header">' +
+            logoHtml +
+            '<h2>' + shopName + '</h2>' +
+            '<div style="font-size:14px; color:#1e3c72; font-weight:bold; margin-top:5px;">' + (isAr ? '🖨️ تقرير مبيعات اليوم كله' : '🖨️ Full Daily Sales Report') + '</div>' +
+            '<div style="font-size:12px; color:#555; margin-top:3px;">' + (isAr ? 'التاريخ: ' : 'Date: ') + todayStr + '</div>' +
+            '</div>' +
+
+            // ملخص الإجماليات
+            '<div class="print-details" style="display:block; line-height:2;">' +
+            '<div><strong>' + (isAr ? 'إجمالي مبيعات اليوم: ' : 'Today Sales: ') + '</strong>' + (salesArr.length ? salesArr.join(' + ') : '0') + '</div>' +
+            '<div><strong>' + (isAr ? 'تكلفة البضاعة: ' : 'Cost: ') + '</strong>' + (costArr.length ? costArr.join(' + ') : '0') + '</div>' +
+            '<div><strong>' + (isAr ? 'صافي الربح: ' : 'Net Profit: ') + '</strong><span style="color:#27ae60; font-weight:bold;">' + (netArr.length ? netArr.join(' + ') : '0') + '</span></div>' +
+            '<div><strong>' + (isAr ? 'إجمالي المشتريات: ' : 'Purchases: ') + '</strong><span style="color:#e67e22;">' + (purchArr.length ? purchArr.join(' + ') : '0') + '</span></div>' +
+            '<div><strong>' + (isAr ? 'إجمالي المصروفات: ' : 'Expenses: ') + '</strong><span style="color:#c0392b;">' + (expArr.length ? expArr.join(' + ') : '0') + '</span></div>' +
+            '</div>' +
+
+            // جدول المبيعات
+            '<h3 style="font-size:14px; color:#1e3c72; margin:15px 0 8px;">' + (isAr ? 'تفاصيل المبيعات (' + todaySales.length + ' فاتورة)' : 'Sales Details (' + todaySales.length + ' invoices)') + '</h3>' +
+            '<table class="print-table"><thead><tr>' +
+            '<th>' + (isAr ? 'رقم الفاتورة' : 'Invoice') + '</th>' +
+            '<th>' + (isAr ? 'العميل' : 'Customer') + '</th>' +
+            '<th>' + (isAr ? 'نوع البيع' : 'Type') + '</th>' +
+            '<th>' + (isAr ? 'المبيعات' : 'Sales') + '</th>' +
+            '<th>' + (isAr ? 'التكلفة' : 'Cost') + '</th>' +
+            '<th>' + (isAr ? 'الربح' : 'Profit') + '</th>' +
+            '</tr></thead><tbody>' + salesRows + '</tbody></table>' +
+
+            // جدول المشتريات
+            '<h3 style="font-size:14px; color:#e67e22; margin:15px 0 8px;">' + (isAr ? 'المشتريات (' + todayPurchases.length + ')' : 'Purchases (' + todayPurchases.length + ')') + '</h3>' +
+            '<table class="print-table"><thead><tr>' +
+            '<th>' + (isAr ? 'البند' : 'Item') + '</th>' +
+            '<th>' + (isAr ? 'المبلغ' : 'Amount') + '</th>' +
+            '<th>' + (isAr ? 'التاريخ' : 'Date') + '</th>' +
+            '</tr></thead><tbody>' + purchRows + '</tbody></table>' +
+
+            // جدول المصروفات
+            '<h3 style="font-size:14px; color:#c0392b; margin:15px 0 8px;">' + (isAr ? 'المصروفات (' + todayExpenses.length + ')' : 'Expenses (' + todayExpenses.length + ')') + '</h3>' +
+            '<table class="print-table"><thead><tr>' +
+            '<th>' + (isAr ? 'البند' : 'Item') + '</th>' +
+            '<th>' + (isAr ? 'المبلغ' : 'Amount') + '</th>' +
+            '<th>' + (isAr ? 'التاريخ' : 'Date') + '</th>' +
+            '</tr></thead><tbody>' + expRows + '</tbody></table>' +
+
+            // جدول الديون (الآجل)
+            '<h3 style="font-size:14px; color:#8e44ad; margin:15px 0 8px;">' + (isAr ? 'الديون / الآجل (' + todayDebts.length + ')' : 'Debts/Credit (' + todayDebts.length + ')') + '</h3>' +
+            '<table class="print-table"><thead><tr>' +
+            '<th>' + (isAr ? 'العميل' : 'Customer') + '</th>' +
+            '<th>' + (isAr ? 'الهاتف' : 'Phone') + '</th>' +
+            '<th>' + (isAr ? 'عدد الأصناف' : 'Items') + '</th>' +
+            '<th>' + (isAr ? 'المبلغ' : 'Amount') + '</th>' +
+            '</tr></thead><tbody>' + debtRows + '</tbody></table>' +
+
+            // تذييل
+            '<div class="print-footer">' + (shopSettings.footer || (isAr ? 'شكراً لكم - قافلة الصحراء' : 'Thank you - Desert Caravan')) + '<br>' +
+            (isAr ? 'تم إنشاء التقرير في: ' : 'Report generated at: ') + now.toLocaleString('ar-EG') + '</div>';
+
+        // تعبئة printable-invoice وطباعة
+        document.getElementById('printable-invoice').innerHTML = reportHtml;
+        let modeSel = document.getElementById('printer-mode');
+        let mode = modeSel ? modeSel.value : 'normal';
+        document.getElementById('app-body').className = mode === 'thermal' ? 'print-mode-thermal' : 'print-mode-normal';
+        window.print();
+        document.getElementById('app-body').className = '';
+
+        // تحديث معلومات الزر
+        let infoEl = document.getElementById('daily-report-info');
+        if(infoEl) {
+            infoEl.innerText = (isAr ? 'آخر طباعة تقرير يومي: ' : 'Last daily report print: ') + now.toLocaleString('ar-EG') + 
+                               ' | ' + (isAr ? 'مبيعات اليوم: ' : 'Today sales: ') + todaySales.length + (isAr ? ' فاتورة' : ' invoices');
+        }
+    }
+    </script>
+</body>
+</html>

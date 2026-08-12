@@ -1,0 +1,15 @@
+{
+  "name": "نظام محاسبي قافله صحراء",
+  "short_name": "قافلة صحراء",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0a1128",
+  "icons": [
+    {
+      "src": "logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
