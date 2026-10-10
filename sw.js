@@ -1,14 +1,13 @@
 // Service Worker for نظام محاسبي قافلة الصحراء
 // Enables full offline functionality
 
-const CACHE_NAME = 'desert-caravan-v2';
+const CACHE_NAME = 'desert-caravan-v3';
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
     './styles.css',
     './manifest.json',
     './logo.png',
-    './html5-qrcode.min.js',
     './html2pdf.bundle.min.js',
     './sw.js'
 ];
@@ -17,7 +16,7 @@ const ASSETS_TO_CACHE = [
 self.addEventListener('install', (event) => {
     event.waitUntil(
         caches.open(CACHE_NAME).then((cache) => {
-            return cache.addAll(ASSETS_TO_CACHE).catch(err => {
+            return Promise.all(ASSETS_TO_CACHE.map(asset => cache.add(asset).catch(err => console.log('Asset cache skipped:', asset, err)))).catch(err => {
                 console.log('Cache addAll error (non-critical):', err);
             });
         })
