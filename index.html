@@ -508,7 +508,10 @@
                                 </select>
                             </div>
                         </div>
-                        <button class="btn-main" style="background:#27ae60; width:100%;" onclick="saveDebtPaymentFromDebtsTab()">✅ تأكيد التسديد وحفظ سند قبض</button>
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                            <button class="btn-main" style="background:#27ae60;flex:2;min-width:180px;" onclick="saveDebtPaymentFromDebtsTab()">✅ تأكيد التسديد وحفظ سند قبض</button>
+                            <button class="btn-main" style="background:#34495e;flex:1;min-width:150px;" onclick="printDebtPaymentReceipt()">🧾 طباعة سند سداد</button>
+                        </div>
                         <small style="display:block; margin-top:7px; color:#386b55;">يُخصم المبلغ من دين العميل بالعملة نفسها، ويُحفظ سند القبض وتظهر قيمة الدين المتبقية.</small>
                     </div>
                     <div style="margin-top:10px; font-weight:bold; color:#d35400;" id="total-debts-box">إجمالي الديون والآجل: 0</div>
@@ -2144,6 +2147,25 @@
         document.getElementById('debt-pay-name').value = '';
         document.getElementById('debt-pay-phone').value = '';
         document.getElementById('debt-pay-amount').value = '';
+    }
+
+    function printDebtPaymentReceipt() {
+        const nameInput = document.getElementById('debt-pay-name').value.trim();
+        const amountInput = Number(document.getElementById('debt-pay-amount').value || 0);
+        const currInput = document.getElementById('debt-pay-curr').value;
+        let receipt = null;
+        if (nameInput && amountInput > 0) {
+            receipt = {name:nameInput, phone:document.getElementById('debt-pay-phone').value.trim(), amount:amountInput, curr:currInput, date:new Date().toLocaleString('ar-EG'), id:Date.now()};
+        } else {
+            receipt = (vouchersRecords || []).slice().sort((a,b)=>Number(b.timestamp||b.id||0)-Number(a.timestamp||a.id||0))[0] || null;
+        }
+        if (!receipt) { alert('أدخل بيانات التسديد أولاً، أو سجّل سند قبض قبل الطباعة.'); return; }
+        const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        const w = window.open('', '_blank', 'width=800,height=650');
+        if (!w) { alert('يرجى السماح بالنوافذ المنبثقة لطباعة سند السداد.'); return; }
+        w.document.open();
+        w.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>سند سداد</title><style>body{font-family:Arial,Tahoma,sans-serif;margin:32px;color:#172b4d} .receipt{max-width:680px;margin:auto;border:2px solid #1e3c72;border-radius:12px;padding:28px}h1{text-align:center;color:#1e3c72;margin-top:0}.sub{text-align:center;color:#777}.row{padding:13px 8px;border-bottom:1px solid #ddd;font-size:18px}.amount{font-size:25px;color:#16865f;font-weight:bold}.sign{display:flex;justify-content:space-between;margin-top:55px}.print{text-align:center;margin-top:24px}button{padding:10px 22px;background:#1e3c72;color:#fff;border:0;border-radius:6px;font-size:16px}@media print{.print{display:none}body{margin:0}.receipt{border:2px solid #222}}</style></head><body><div class="receipt"><h1>نظام محاسبي قافلة الصحراء</h1><div class="sub">سند سداد / سند قبض</div><div class="row">رقم السند: <b>${esc(receipt.id || receipt.timestamp || '—')}</b></div><div class="row">التاريخ: <b>${esc(receipt.date || new Date().toLocaleString('ar-EG'))}</b></div><div class="row">اسم العميل: <b>${esc(receipt.name)}</b></div><div class="row">رقم الهاتف: <b>${esc(receipt.phone || '—')}</b></div><div class="row">مبلغ السداد: <span class="amount">${esc(Number(receipt.amount).toLocaleString('ar-EG'))} ${esc(receipt.curr)}</span></div><div class="row">وصف العملية: سداد من رصيد دين العميل</div><div class="sign"><span>توقيع المستلم: __________</span><span>توقيع العميل: __________</span></div><div class="print"><button onclick="window.print()">طباعة السند</button></div></div></body></html>`);
+        w.document.close();
     }
 
     function saveReceiptVoucher() {
