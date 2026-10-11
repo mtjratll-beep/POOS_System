@@ -508,11 +508,8 @@
                                 </select>
                             </div>
                         </div>
-                        <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                            <button class="btn-main" style="background:#27ae60;flex:2;min-width:180px;" onclick="saveDebtPaymentFromDebtsTab()">✅ تأكيد التسديد وحفظ سند قبض</button>
-                            <button class="btn-main" style="background:#34495e;flex:1;min-width:150px;" onclick="printDebtPaymentReceipt()">🧾 طباعة سند سداد</button>
-                        </div>
-                        <small style="display:block; margin-top:7px; color:#386b55;">يُخصم المبلغ من دين العميل بالعملة نفسها، ويُحفظ سند القبض وتظهر قيمة الدين المتبقية.</small>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn-main" style="background:#27ae60; flex:2;" onclick="saveDebtPaymentFromDebtsTab()">✅ تأكيد التسديد وحفظ الدفعة</button><button class="btn-main" style="background:#167a68; flex:1;" onclick="printLastDebtPaymentVoucher()">🖨️ طباعة سند سداد</button></div>
+                        <small style="display:block; margin-top:7px; color:#386b55;">يُخصم المبلغ من دين العميل بالعملة نفسها، ويُحفظ سند السداد في المقبوضات، ويُخصم من الدين بالعملة نفسها دون احتسابه بيعًا جديدًا.</small>
                     </div>
                     <div style="margin-top:10px; font-weight:bold; color:#d35400;" id="total-debts-box">إجمالي الديون والآجل: 0</div>
                     <div id="overdue-debt-alerts" style="margin-top:10px;"></div>
@@ -1691,6 +1688,27 @@
         }
 
         inv.paymentType = type;
+        if(type === 'آجل') {
+            const normCustomer=v=>String(v||'').trim().replace(/\s+/g,' ').toLocaleLowerCase();
+            const customerName=String(inv.custName||'').trim();
+            const customerPhone=String(inv.custPhone||'').replace(/\D/g,'');
+            if(customerName || customerPhone) {
+                const existing=debtsRecords.filter(d => (customerName && normCustomer(d.custName)===normCustomer(customerName)) || (customerPhone && String(d.custPhone||'').replace(/\D/g,'')===customerPhone));
+                if(existing.length) {
+                    const totals={}; existing.forEach(d=>Object.entries(d.subtotalByCurr||{}).forEach(([c,v])=>totals[c]=(totals[c]||0)+Math.max(0,Number(v||0)-(c===d.discountCurr?Number(d.discount||0):0))));
+                    const balance=Object.entries(totals).filter(([c,v])=>v>0).map(([c,v])=>`${v.toLocaleString()} ${c}`).join(' + ')||'0';
+                    const msg=`⚠️ العميل موجود عليه دين سابق
+
+الاسم: ${customerName||existing[0].custName}
+الهاتف: ${inv.custPhone||existing[0].custPhone||'—'}
+عدد الفواتير القائمة: ${existing.length}
+إجمالي الدين السابق: ${balance}
+
+سيتم ربط الفاتورة الجديدة بنفس العميل وإظهارها في كشف حسابه. هل تريد متابعة البيع الآجل؟`;
+                    if(!confirm(msg)) return;
+                }
+            }
+        }
 
         inv.items.forEach(item => {
             let p = products.find(prod => prod.id === item.id);
@@ -2040,79 +2058,46 @@
 
     function openCustomerDebtDetails(customerName) {
         const norm=v=>String(v||'').trim().replace(/\s+/g,' ').toLocaleLowerCase();
-        const matchName=r=>norm(r.custName||r.name)===norm(customerName);
-        const debts=debtsRecords.filter(matchName);
-        const sales=completedSalesRecords.filter(r=>matchName(r) && !['سند قبض تقصيد','سند صرف (خصم)','مشتريات (خصم)'].includes(r.type));
-        const receipts=vouchersRecords.filter(matchName);
-        const totals={};
-        debts.forEach(d=>Object.keys(d.subtotalByCurr||{}).forEach(c=>{totals[c]=(totals[c]||0)+Math.max(0,Number(d.subtotalByCurr[c]||0)-(c===d.discountCurr?Number(d.discount||0):0));}));
-        const fmtObj=o=>Object.entries(o||{}).filter(([c,v])=>Number(v||0)!==0).map(([c,v])=>`${Number(v).toLocaleString()} ${c}`).join(' + ')||'—';
-        let movements=[];
-        const customerEvents=(ledgerEvents||[]).filter(e=>norm(e.customer)===norm(customerName));
-        customerEvents.forEach(e=>movements.push({date:e.date||'',type:e.type||'حركة',amount:fmtObj(e.amounts),discount:(e.discount||0)>0?`${e.discount} ${e.discountCurr||''}`:'—',sort:Number(e.timestamp||e.id||0)}));
-        // Show legacy active debts that predate the ledger history feature, without duplicating newly tracked debts.
-        debts.filter(d=>!customerEvents.some(e=>e.debtId===d.id)).forEach(d=>movements.push({date:d.date||'',type:'دين قائم (سجل قديم)',amount:fmtObj(d.subtotalByCurr),discount:d.discount?`${d.discount} ${d.discountCurr||''}`:'—',sort:Number(d.id||0)}));
-        sales.forEach(r=>movements.push({date:r.date||'',type:r.type||'بيع / حركة مالية',amount:fmtObj(r.subtotalByCurr),discount:(r.discount||0)>0?`${r.discount} ${r.discountCurr||''}`:'—',sort:Number(r.timestamp||r.id||0)}));
-        if(!customerEvents.length) receipts.forEach(r=>movements.push({date:r.date||'',type:'سند قبض / سداد',amount:`${Number(r.amount||0).toLocaleString()} ${r.curr||''}`,discount:'—',sort:Number(r.timestamp||r.id||0)}));
+        const key=norm(customerName);
+        const debts=debtsRecords.filter(d=>norm(d.custName)===key);
+        const receipts=vouchersRecords.filter(r=>norm(r.name||r.custName)===key);
+        const events=(ledgerEvents||[]).filter(e=>norm(e.customer)===key);
+        const byCurr=(records,getter)=>records.reduce((out,r)=>{Object.entries(getter(r)||{}).forEach(([c,v])=>out[c]=(out[c]||0)+Number(v||0));return out;},{});
+        const remaining=byCurr(debts,d=>{const o={...(d.subtotalByCurr||{})};if(d.discountCurr&&d.discount)o[d.discountCurr]=Math.max(0,Number(o[d.discountCurr]||0)-Number(d.discount||0));return o;});
+        const paid=byCurr(receipts,r=>({[r.curr||'']:Number(r.amount||0)}));
+        const fmt=o=>Object.entries(o).filter(([c,v])=>c&&v>0).map(([c,v])=>`${v.toLocaleString()} ${c}`).join(' + ')||'0';
+        const invoiceRows=debts.map(d=>`<tr><td>${d.invNum||'—'}</td><td>${d.date||'—'}</td><td>${fmt(d.subtotalByCurr)}</td><td>${fmt(Object.fromEntries(Object.entries(d.subtotalByCurr||{}).map(([c,v])=>[c,Math.max(0,Number(v||0)-(c===d.discountCurr?Number(d.discount||0):0))])))}</td></tr>`).join('')||'<tr><td colspan="4">لا توجد فواتير دين قائمة</td></tr>';
+        const movements=[];
+        events.forEach(e=>movements.push({sort:Number(e.timestamp||e.id||0),date:e.date||'',type:e.type||'حركة',amount:fmt(e.amounts)}));
+        receipts.forEach(r=>movements.push({sort:Number(r.timestamp||r.id||0),date:r.date||'',type:'تسديد / سند قبض',amount:`${Number(r.amount||0).toLocaleString()} ${r.curr||''}`}));
+        debts.filter(d=>!events.some(e=>e.debtId===d.id)).forEach(d=>movements.push({sort:Number(d.timestamp||d.id||0),date:d.date||'',type:`دين فاتورة ${d.invNum||'—'}`,amount:fmt(d.subtotalByCurr)}));
         movements.sort((a,b)=>a.sort-b.sort);
-        const rows=movements.map(m=>`<tr><td>${m.date}</td><td>${m.type}</td><td>${m.amount}</td><td>${m.discount}</td></tr>`).join('')||'<tr><td colspan="4" style="text-align:center">لا توجد حركات مسجلة لهذا العميل</td></tr>';
+        const movementRows=movements.map(m=>`<tr><td>${m.date}</td><td>${m.type}</td><td>${m.amount}</td></tr>`).join('')||'<tr><td colspan="3">لا توجد حركات مسجلة</td></tr>';
         let modal=document.getElementById('customer-debt-detail-modal');
-        if(!modal){modal=document.createElement('div');modal.id='customer-debt-detail-modal';modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100010;display:flex;align-items:center;justify-content:center;padding:14px;';document.body.appendChild(modal);}
-        modal.innerHTML=`<div id="customer-ledger-print" style="background:#fff;border-radius:12px;padding:18px;width:100%;max-width:850px;max-height:88vh;overflow:auto;direction:rtl"><h3 style="color:#1e3c72;margin-bottom:8px">📒 كشف حساب العميل: ${customerName}</h3><div style="font-weight:bold;color:#c0392b;margin:8px 0">إجمالي الديون المتبقية: ${fmtObj(totals)}</div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr><th>التاريخ</th><th>نوع الحركة</th><th>المبلغ / العملة</th><th>الخصم</th></tr></thead><tbody>${rows}</tbody></table></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px"><button onclick="printCustomerLedger()" style="background:#27ae60;color:white;border:0;border-radius:6px;padding:10px 16px;font-weight:bold">🖨️ طباعة كشف الحساب</button><button onclick="document.getElementById('customer-debt-detail-modal').remove()" style="background:#1e3c72;color:white;border:0;border-radius:6px;padding:10px 18px;font-weight:bold">إغلاق</button></div></div>`;
+        if(!modal){modal=document.createElement('div');modal.id='customer-debt-detail-modal';modal.style.cssText='position:fixed;inset:0;background:rgba(9,22,42,.72);z-index:100010;display:flex;align-items:center;justify-content:center;padding:12px;';document.body.appendChild(modal);}
+        modal.innerHTML=`<div id="customer-ledger-print" style="background:#fff;border-radius:18px;padding:18px;width:100%;max-width:900px;max-height:90vh;overflow:auto;direction:rtl;box-shadow:0 15px 50px #0003;color:#20334f"><div style="text-align:center;background:#eaf8f0;border:2px solid #2aa66a;border-radius:14px;padding:14px;margin-bottom:12px"><h2 style="margin:0 0 6px;color:#1e3c72">📒 كشف حساب العميل</h2><div style="font-size:22px;font-weight:bold">${customerName}</div><div style="margin-top:6px">رقم الهاتف: ${(debts.find(d=>d.custPhone)||{}).custPhone||receipts[0]?.phone||'—'}</div></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:14px"><div style="background:#fff5e8;border-radius:10px;padding:12px"><b>إجمالي المتبقي</b><div style="color:#c45b12;font-size:17px;font-weight:bold">${fmt(remaining)}</div></div><div style="background:#eaf8f0;border-radius:10px;padding:12px"><b>إجمالي المسدد المسجل</b><div style="color:#16865f;font-size:17px;font-weight:bold">${fmt(paid)}</div></div><div style="background:#edf2fc;border-radius:10px;padding:12px"><b>عدد الفواتير القائمة</b><div style="font-size:17px;font-weight:bold">${debts.length}</div></div></div><h3>🧾 الفواتير والديون</h3><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:520px"><thead><tr><th>رقم الفاتورة</th><th>التاريخ والوقت</th><th>قيمة الفاتورة</th><th>المتبقي</th></tr></thead><tbody>${invoiceRows}</tbody></table></div><h3 style="margin-top:18px">💳 سجل الحركات والتسديدات</h3><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:420px"><thead><tr><th>التاريخ والوقت</th><th>الحركة</th><th>المبلغ</th></tr></thead><tbody>${movementRows}</tbody></table></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px"><button onclick="printCustomerLedger()" style="background:#159b72;color:white;border:0;border-radius:9px;padding:12px 18px;font-weight:bold">🖨️ طباعة كشف الحساب</button><button onclick="document.getElementById('customer-debt-detail-modal').remove()" style="background:#1e3c72;color:white;border:0;border-radius:9px;padding:12px 18px;font-weight:bold">إغلاق</button></div></div>`;
     }
     function printCustomerLedger(){const el=document.getElementById('customer-ledger-print');if(!el)return;const w=window.open('','_blank');if(!w){alert('يرجى السماح بالنوافذ المنبثقة للطباعة.');return;}w.document.write('<html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>كشف حساب العميل</title><style>body{font-family:Tahoma;padding:20px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #444;padding:8px;text-align:right}th{background:#eee}</style></head><body>'+el.innerHTML+'</body></html>');w.document.close();w.focus();w.print();}
 
     function renderDebtsTable() {
-        let tbody = document.getElementById('debts-table-body');
-        tbody.innerHTML = '';
-
-        let totalsByCurr = {};
-        let totalLabel = currentLang === 'ar' ? 'إجمالي الديون والآجل: ' : 'Total Debts & Credit: ';
-
-        if(debtsRecords.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;">${currentLang === 'ar' ? 'لا توجد ديون مسجلة حتى الآن' : 'No recorded debts'}</td></tr>`;
-            document.getElementById('total-debts-box').innerText = totalLabel + '0';
-            renderOverdueDebtAlerts();
-            return;
-        }
-
-        debtsRecords.forEach(d => {
-            let totalsTextArr = [];
-            for(let curr in d.subtotalByCurr) {
-                let finalVal = d.subtotalByCurr[curr];
-                if(curr === d.discountCurr && d.discount) finalVal -= d.discount;
-                if(finalVal < 0) finalVal = 0;
-
-                if(finalVal > 0) {
-                    totalsTextArr.push(`${finalVal} ${curr}`);
-                    totalsByCurr[curr] = (totalsByCurr[curr] || 0) + finalVal;
-                }
-            }
-
-            if(totalsTextArr.length > 0) {
-                let paidText = currentLang === 'ar' ? '✔ تم السداد' : '✔ Paid';
-                let deleteText = currentLang === 'ar' ? '🗑️ حذف' : '🗑️ Delete';
-
-                tbody.innerHTML += `<tr>
-                    <td>${d.invNum}</td>
-                    <td><button onclick="openCustomerDebtDetails(this.textContent)" style="border:0;background:transparent;color:#1e3c72;text-decoration:underline;font-weight:bold;cursor:pointer;">${d.custName}</button></td>
-                    <td style="color:#d35400; font-weight:bold;">${totalsTextArr.join(' + ')}</td>
-                    <td>${d.date}</td>
-                    <td style="text-align:center; display:flex; gap:4px; justify-content:center; flex-wrap:wrap;">
-                        <button onclick="printSavedDebt(${d.id})" style="background:#16a085; color:#fff; border:none; padding:3px 6px; border-radius:4px; cursor:pointer; font-size:10px;">🖨️ ${currentLang === 'ar' ? 'طباعة' : 'Print'}</button>
-                        <button onclick="printSavedDebtPDF(${d.id})" style="background:#9b59b6; color:#fff; border:none; padding:3px 6px; border-radius:4px; cursor:pointer; font-size:10px;">💾 ${currentLang === 'ar' ? 'PDF' : 'PDF'}</button>
-                        <button onclick="markDebtAsPaid(${d.id})" style="background:#27ae60; color:#fff; border:none; padding:3px 6px; border-radius:4px; cursor:pointer; font-size:10px;">${paidText}</button>
-                        <button onclick="deleteDebtRecord(${d.id})" style="background:#c0392b; color:#fff; border:none; padding:3px 6px; border-radius:4px; cursor:pointer; font-size:10px;">${deleteText}</button>
-                    </td>
-                </tr>`;
-            }
+        const tbody=document.getElementById('debts-table-body'); tbody.innerHTML='';
+        const norm=v=>String(v||'').trim().replace(/\s+/g,' ').toLocaleLowerCase();
+        const groups=new Map();
+        (debtsRecords||[]).forEach(d=>{
+            const key=norm(d.custPhone)||norm(d.custName)||String(d.id);
+            if(!groups.has(key)) groups.set(key,{name:d.custName||'عميل بدون اسم',phone:d.custPhone||'',debts:[],totals:{}});
+            const g=groups.get(key); g.debts.push(d); if(!g.phone&&d.custPhone)g.phone=d.custPhone;
+            Object.entries(d.subtotalByCurr||{}).forEach(([c,v])=>{const n=Math.max(0,Number(v||0)-(c===d.discountCurr?Number(d.discount||0):0));g.totals[c]=(g.totals[c]||0)+n;});
         });
-
-        let overallArr = [];
-        for(let curr in totalsByCurr) {
-            overallArr.push(`${totalsByCurr[curr]} ${curr}`);
-        }
-        document.getElementById('total-debts-box').innerText = `${totalLabel}${overallArr.length > 0 ? overallArr.join(' + ') : '0'}`;
+        const fmt=o=>Object.entries(o).filter(([c,v])=>v>0).map(([c,v])=>`${v.toLocaleString()} ${c}`).join(' + ');
+        const allTotals={};
+        if(!groups.size){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;padding:18px">لا توجد ديون مسجلة حتى الآن</td></tr>';document.getElementById('total-debts-box').innerText='إجمالي الديون والآجل: 0';renderOverdueDebtAlerts();return;}
+        groups.forEach(g=>{
+            Object.entries(g.totals).forEach(([c,v])=>allTotals[c]=(allTotals[c]||0)+v);
+            const last=g.debts.slice().sort((a,b)=>Number(b.timestamp||b.id||0)-Number(a.timestamp||a.id||0))[0];
+            tbody.innerHTML+=`<tr><td>${g.debts.map(d=>d.invNum||'مباشر').join('، ')}</td><td><button onclick="openCustomerDebtDetails(${JSON.stringify(g.name)})" style="border:0;background:#eaf1ff;color:#1e3c72;border-radius:10px;padding:9px 12px;font-weight:bold;cursor:pointer">👤 ${g.name}<div style="font-size:11px;font-weight:normal">${g.phone||''} · ${g.debts.length} فاتورة — فتح كشف الحساب</div></button></td><td style="color:#c45b12;font-weight:bold">${fmt(g.totals)||'مسدد'}</td><td>${last.date||'—'}</td><td style="text-align:center"><button onclick="openCustomerDebtDetails(${JSON.stringify(g.name)})" style="background:#159b72;color:#fff;border:0;padding:7px 10px;border-radius:8px">📄 التفاصيل والطباعة</button></td></tr>`;
+        });
+        document.getElementById('total-debts-box').innerText='إجمالي الديون والآجل: '+(fmt(allTotals)||'0');
         renderOverdueDebtAlerts();
     }
 
@@ -2122,6 +2107,28 @@
         document.getElementById('debt-amount').value = '';
     }
 
+    // يحتفظ بآخر سند سداد ليُطبع بنفس قالب سند القبض دون تغيير طريقة الحساب.
+    let lastDebtPaymentVoucher = null;
+    function printLastDebtPaymentVoucher() {
+        const name = (document.getElementById('debt-pay-name').value || '').trim();
+        const phone = (document.getElementById('debt-pay-phone').value || '').trim();
+        const amount = Number(document.getElementById('debt-pay-amount').value || 0);
+        const curr = document.getElementById('debt-pay-curr').value;
+        const rec = lastDebtPaymentVoucher || (name && amount > 0 ? {name, phone, amount, curr, date:new Date().toLocaleString('ar-EG')} : null);
+        if (!rec) { alert('سجّل دفعة أولاً، أو أدخل بيانات الدفعة ثم اطبع السند.'); return; }
+        let html = buildVoucherHTML('rec', 'سند سداد', '#27ae60', 'اسم العميل', rec.name, 'المبلغ المسدد', '#27ae60', Number(rec.amount).toLocaleString('ar-EG') + ' ' + rec.curr);
+        html = html.replace(/<p style="margin:4px 0;"><b>التاريخ:<\/b> [\s\S]*?<\/p>/, '<p style="margin:4px 0;"><b>التاريخ والوقت:</b> ' + rec.date + '</p>');
+        if (rec.phone) html = html.replace('</div>\n                <div style="display:flex; justify-content:space-between;', '<p style="margin:4px 0;"><b>رقم الهاتف:</b> ' + rec.phone + '</p></div>\n                <div style="display:flex; justify-content:space-between;');
+        lastPreviewInvoiceHtml = html;
+        document.getElementById('printable-invoice').innerHTML = html;
+        const modeSel = document.getElementById('printer-mode');
+        document.getElementById('app-body').className = modeSel && modeSel.value === 'thermal' ? 'print-mode-thermal' : 'print-mode-normal';
+        window.print();
+        document.getElementById('app-body').className = '';
+    }
+
+    // يميّز تسديد الدين عن سند القبض العادي حتى لا تُسجّل الدفعة كبيع جديد أو ربح جديد.
+    let isDebtPaymentInProgress = false;
     function saveDebtPaymentFromDebtsTab() {
         const name = document.getElementById('debt-pay-name').value.trim();
         const phone = document.getElementById('debt-pay-phone').value.trim();
@@ -2143,29 +2150,12 @@
         document.getElementById('vouch-phone').value = phone;
         document.getElementById('vouch-amount').value = Math.min(amount, balance);
         document.getElementById('vouch-curr').value = curr;
-        saveReceiptVoucher();
+        lastDebtPaymentVoucher = {name, phone, amount:Math.min(amount, balance), curr, date:new Date().toLocaleString('ar-EG'), timestamp:Date.now()};
+        isDebtPaymentInProgress = true;
+        try { saveReceiptVoucher(); } finally { isDebtPaymentInProgress = false; }
         document.getElementById('debt-pay-name').value = '';
         document.getElementById('debt-pay-phone').value = '';
         document.getElementById('debt-pay-amount').value = '';
-    }
-
-    function printDebtPaymentReceipt() {
-        const nameInput = document.getElementById('debt-pay-name').value.trim();
-        const amountInput = Number(document.getElementById('debt-pay-amount').value || 0);
-        const currInput = document.getElementById('debt-pay-curr').value;
-        let receipt = null;
-        if (nameInput && amountInput > 0) {
-            receipt = {name:nameInput, phone:document.getElementById('debt-pay-phone').value.trim(), amount:amountInput, curr:currInput, date:new Date().toLocaleString('ar-EG'), id:Date.now()};
-        } else {
-            receipt = (vouchersRecords || []).slice().sort((a,b)=>Number(b.timestamp||b.id||0)-Number(a.timestamp||a.id||0))[0] || null;
-        }
-        if (!receipt) { alert('أدخل بيانات التسديد أولاً، أو سجّل سند قبض قبل الطباعة.'); return; }
-        const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-        const w = window.open('', '_blank', 'width=800,height=650');
-        if (!w) { alert('يرجى السماح بالنوافذ المنبثقة لطباعة سند السداد.'); return; }
-        w.document.open();
-        w.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>سند سداد</title><style>body{font-family:Arial,Tahoma,sans-serif;margin:32px;color:#172b4d} .receipt{max-width:680px;margin:auto;border:2px solid #1e3c72;border-radius:12px;padding:28px}h1{text-align:center;color:#1e3c72;margin-top:0}.sub{text-align:center;color:#777}.row{padding:13px 8px;border-bottom:1px solid #ddd;font-size:18px}.amount{font-size:25px;color:#16865f;font-weight:bold}.sign{display:flex;justify-content:space-between;margin-top:55px}.print{text-align:center;margin-top:24px}button{padding:10px 22px;background:#1e3c72;color:#fff;border:0;border-radius:6px;font-size:16px}@media print{.print{display:none}body{margin:0}.receipt{border:2px solid #222}}</style></head><body><div class="receipt"><h1>نظام محاسبي قافلة الصحراء</h1><div class="sub">سند سداد / سند قبض</div><div class="row">رقم السند: <b>${esc(receipt.id || receipt.timestamp || '—')}</b></div><div class="row">التاريخ: <b>${esc(receipt.date || new Date().toLocaleString('ar-EG'))}</b></div><div class="row">اسم العميل: <b>${esc(receipt.name)}</b></div><div class="row">رقم الهاتف: <b>${esc(receipt.phone || '—')}</b></div><div class="row">مبلغ السداد: <span class="amount">${esc(Number(receipt.amount).toLocaleString('ar-EG'))} ${esc(receipt.curr)}</span></div><div class="row">وصف العملية: سداد من رصيد دين العميل</div><div class="sign"><span>توقيع المستلم: __________</span><span>توقيع العميل: __________</span></div><div class="print"><button onclick="window.print()">طباعة السند</button></div></div></body></html>`);
-        w.document.close();
     }
 
     function saveReceiptVoucher() {
@@ -2187,17 +2177,16 @@
             curr, 
             date: new Date().toLocaleString('ar-EG'), timestamp: Date.now() 
         });
-        ledgerEvents.push({id:Date.now(),customer:name,type:'سداد / سند قبض',amounts:{[curr]:amount},discount:0,discountCurr:curr,date:new Date().toLocaleString('ar-EG'),timestamp:Date.now()});
-        logAudit('سند قبض', `${name} | ${amount} ${curr}`);
+        ledgerEvents.push({id:Date.now(),customer:name,type:isDebtPaymentInProgress ? 'سداد دين / سند سداد' : 'سداد / سند قبض',amounts:{[curr]:amount},discount:0,discountCurr:curr,date:new Date().toLocaleString('ar-EG'),timestamp:Date.now()});
+        logAudit(isDebtPaymentInProgress ? 'سند سداد دين' : 'سند قبض', `${name} | ${amount} ${curr}`);
 
-        let totalCostOfInstallment = 0;
-        let totalOriginalInvoiceAmount = 0;
-
-        let matchingDebts = debtsRecords.filter(d => String(d.custName || '').trim().replace(/\\s+/g, ' ').toLocaleLowerCase() === name.trim().replace(/\\s+/g, ' ').toLocaleLowerCase());
-
-        matchingDebts.forEach(debt => {
-            if (debt.items && debt.items.length > 0) {
-                debt.items.forEach(i => {
+        // نفس آلية سند القبض الأصلية: توزيع الدفعة على المقبوضات والتكلفة والربح حسب فواتير العميل، مع تسجيلها كسداد دين.
+        {
+            let totalCostOfInstallment = 0;
+            let totalOriginalInvoiceAmount = 0;
+            let matchingDebtsForProfit = debtsRecords.filter(d => String(d.custName || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase() === name.trim().replace(/\s+/g, ' ').toLocaleLowerCase());
+            matchingDebtsForProfit.forEach(debt => {
+                if (debt.items && debt.items.length > 0) debt.items.forEach(i => {
                     if(i.curr === curr) {
                         let pObj = products.find(prod => prod.id === i.id);
                         let bPrice = pObj ? pObj.buyPrice : (i.buyPrice || 0);
@@ -2205,36 +2194,14 @@
                         totalCostOfInstallment += (bPrice * i.qty);
                     }
                 });
-            }
-        });
-
-        let profitRatio = 0;
-        if(totalOriginalInvoiceAmount > 0) {
-            let totalProfitOfDebt = totalOriginalInvoiceAmount - totalCostOfInstallment;
-            profitRatio = totalProfitOfDebt / totalOriginalInvoiceAmount;
-        } else {
-            profitRatio = 0.20;
+            });
+            let profitRatio = totalOriginalInvoiceAmount > 0 ? (totalOriginalInvoiceAmount - totalCostOfInstallment) / totalOriginalInvoiceAmount : 0;
+            let profitPortionOfInstallment = amount * profitRatio;
+            let costPortionOfInstallment = amount - profitPortionOfInstallment;
+            let payObj = {}; payObj[curr] = amount;
+            let costObj = {}; costObj[curr] = costPortionOfInstallment;
+            completedSalesRecords.push({id: Date.now(), displayNum: 'سند قبض (تقصيد)', custName: name, subtotalByCurr: payObj, totalCostByCurr: costObj, type: 'سند قبض تقصيد', date: new Date().toLocaleString('ar-EG'), timestamp: Date.now()});
         }
-
-        let profitPortionOfInstallment = amount * profitRatio;
-        let costPortionOfInstallment = amount - profitPortionOfInstallment;
-
-        let payObj = {};
-        payObj[curr] = amount;
-
-        let costObj = {};
-        costObj[curr] = costPortionOfInstallment;
-
-        completedSalesRecords.push({
-            id: Date.now(),
-            displayNum: 'سند قبض (تقصيد)',
-            custName: name,
-            subtotalByCurr: payObj,
-            totalCostByCurr: costObj,
-            type: 'سند قبض تقصيد',
-            date: new Date().toLocaleString('ar-EG'),
-            timestamp: Date.now()
-        });
 
         logAudit('تسديد دين عميل', `${name} | ${amount} ${curr}`);
         let remainingToDeduct = amount;
@@ -2279,7 +2246,7 @@
         clearVoucherFields();
 
         // حساب المبلغ المتبقي على العميل بعد سند القبض
-        let remainingDebts = debtsRecords.filter(d => String(d.custName || '').trim().replace(/\\s+/g, ' ').toLocaleLowerCase() === name.trim().replace(/\\s+/g, ' ').toLocaleLowerCase());
+        let remainingDebts = debtsRecords.filter(d => String(d.custName || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase() === name.trim().replace(/\s+/g, ' ').toLocaleLowerCase());
         let remainingByCurr = {};
         remainingDebts.forEach(d => {
             for(let c in d.subtotalByCurr) {
@@ -2378,7 +2345,7 @@
         // تصفير وخصم ديون الموردين بالتوالي
         let remainingAmount = amount;
         let targetCurrency = curr;
-        let supplierDebts = debtsRecords.filter(d => String(d.custName || '').trim().replace(/\\s+/g, ' ').toLocaleLowerCase() === name.trim().replace(/\\s+/g, ' ').toLocaleLowerCase());
+        let supplierDebts = debtsRecords.filter(d => String(d.custName || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase() === name.trim().replace(/\s+/g, ' ').toLocaleLowerCase());
 
         if (supplierDebts.length > 0) {
             supplierDebts.forEach(debt => {
