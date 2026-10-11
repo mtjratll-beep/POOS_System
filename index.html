@@ -512,6 +512,14 @@
                         <small style="display:block; margin-top:7px; color:#386b55;">يُخصم المبلغ من دين العميل بالعملة نفسها، ويُحفظ سند السداد في المقبوضات، ويُخصم من الدين بالعملة نفسها دون احتسابه بيعًا جديدًا.</small>
                     </div>
                     <div style="margin-top:10px; font-weight:bold; color:#d35400;" id="total-debts-box">إجمالي الديون والآجل: 0</div>
+                    <button type="button" class="btn-main" style="background:#1e3c72; width:100%; margin-top:10px;" onclick="toggleCustomerDebtScanner()">🔎 كاشف ديون العملاء وإجمالي كل عميل</button>
+                    <div id="customer-debt-scanner" style="display:none; margin-top:12px; padding:12px; border:2px solid #1e3c72; border-radius:10px; background:#f7faff;">
+                        <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:space-between; margin-bottom:10px;">
+                            <h4 style="margin:0; color:#1e3c72;">📒 كشف إجمالي ديون العملاء</h4>
+                            <button type="button" onclick="printCustomerDebtScanner()" style="background:#16a085;color:white;border:0;border-radius:6px;padding:8px 12px;font-weight:bold;">🖨️ طباعة الكشف</button>
+                        </div>
+                        <div id="customer-debt-scanner-content"></div>
+                    </div>
                     <div id="overdue-debt-alerts" style="margin-top:10px;"></div>
 
                     <h4 style="margin-top:15px; margin-bottom:8px; color:#1e3c72; font-size:13px;" data-i18n="debt_table_title">جدول فواتير الديون والآجل</h4>
@@ -2079,6 +2087,80 @@
     }
     function printCustomerLedger(){const el=document.getElementById('customer-ledger-print');if(!el)return;const w=window.open('','_blank');if(!w){alert('يرجى السماح بالنوافذ المنبثقة للطباعة.');return;}w.document.write('<html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>كشف حساب العميل</title><style>body{font-family:Tahoma;padding:20px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #444;padding:8px;text-align:right}th{background:#eee}</style></head><body>'+el.innerHTML+'</body></html>');w.document.close();w.focus();w.print();}
 
+    function toggleCustomerDebtScanner() {
+        const panel = document.getElementById('customer-debt-scanner');
+        if (!panel) return;
+        const opening = panel.style.display === 'none' || !panel.style.display;
+        panel.style.display = opening ? 'block' : 'none';
+        if (opening) renderCustomerDebtScanner();
+    }
+
+    function renderCustomerDebtScanner() {
+        const host = document.getElementById('customer-debt-scanner-content');
+        if (!host) return;
+        const normalize = value => String(value || '').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+        const customers = new Map();
+        const grandDebt = {}, grandPaid = {}, grandRemaining = {};
+        const ensureCustomer = (name, phone='') => {
+            const cleanName = String(name || 'عميل بدون اسم').trim() || 'عميل بدون اسم';
+            const key = normalize(cleanName);
+            if (!customers.has(key)) customers.set(key, {name:cleanName, phone, debt:{}, paid:{}, remaining:{}});
+            const c = customers.get(key);
+            if (!c.phone && phone) c.phone = phone;
+            return c;
+        };
+        const addAmounts = (target, amounts) => Object.entries(amounts || {}).forEach(([currency, raw]) => {
+            const amount = Number(raw || 0);
+            if (!currency || !Number.isFinite(amount) || amount <= 0) return;
+            target[currency] = (target[currency] || 0) + amount;
+        });
+        // أصل الدين: نسجل كل فاتورة دين مرة واحدة من سجل الحركات، مع خصم التخفيض.
+        (ledgerEvents || []).forEach(event => {
+            const type = String(event.type || '');
+            const customer = ensureCustomer(event.customer || event.custName || 'عميل بدون اسم');
+            if (/بيع آجل|تسجيل دين مباشر/.test(type)) {
+                const amounts = {...(event.amounts || {})};
+                if (event.discountCurr && event.discount) amounts[event.discountCurr] = Math.max(0, Number(amounts[event.discountCurr] || 0) - Number(event.discount || 0));
+                addAmounts(customer.debt, amounts);
+                addAmounts(grandDebt, amounts);
+            } else if (/سداد|سند قبض/.test(type)) {
+                addAmounts(customer.paid, event.amounts || {});
+                addAmounts(grandPaid, event.amounts || {});
+            }
+        });
+        // المتبقي يؤخذ من الديون المفتوحة فقط، فتظل الدفعات المسددة ظاهرة ضمن الإجمالي المدفوع.
+        (debtsRecords || []).forEach(debt => {
+            const customer = ensureCustomer(debt.custName || debt.name, debt.custPhone || debt.phone || '');
+            const amounts = {...(debt.subtotalByCurr || {})};
+            if (debt.discountCurr && debt.discount) amounts[debt.discountCurr] = Math.max(0, Number(amounts[debt.discountCurr] || 0) - Number(debt.discount || 0));
+            addAmounts(customer.remaining, amounts);
+            addAmounts(grandRemaining, amounts);
+        });
+        const fmt = amount => Number(amount || 0).toLocaleString('ar-SA', {maximumFractionDigits: 2});
+        const fmtTotals = totals => Object.entries(totals || {}).filter(([, amount]) => amount > 0).map(([currency, amount]) => `${fmt(amount)} ${currency}`).join(' + ') || '0';
+        const list = Array.from(customers.values()).filter(c => Object.values(c.debt).some(v=>v>0) || Object.values(c.paid).some(v=>v>0) || Object.values(c.remaining).some(v=>v>0)).sort((a,b) => a.name.localeCompare(b.name, 'ar'));
+        if (!list.length) {
+            host.innerHTML = '<div style="text-align:center;padding:18px;color:#666;">لا توجد ديون أو تسديدات مسجلة للعملاء.</div>';
+            return;
+        }
+        const rows = list.map((customer, index) => `<tr><td style="padding:8px;border:1px solid #d7dfeb">${index + 1}</td><td style="padding:8px;border:1px solid #d7dfeb"><strong>${escapeDebtScannerText(customer.name)}</strong>${customer.phone ? `<div style="font-size:11px;color:#666">${escapeDebtScannerText(customer.phone)}</div>` : ''}</td><td style="padding:8px;border:1px solid #d7dfeb">${fmtTotals(customer.debt)}</td><td style="padding:8px;border:1px solid #d7dfeb;color:#16865f;font-weight:bold">${fmtTotals(customer.paid)}</td><td style="padding:8px;border:1px solid #d7dfeb;color:#c0392b;font-weight:bold">${fmtTotals(customer.remaining)}</td></tr>`).join('');
+        host.innerHTML = `<div style="overflow-x:auto"><table id="customer-debt-scanner-table" style="width:100%;border-collapse:collapse;background:white"><thead><tr><th style="padding:8px;border:1px solid #d7dfeb">#</th><th style="padding:8px;border:1px solid #d7dfeb">اسم العميل</th><th style="padding:8px;border:1px solid #d7dfeb">إجمالي الدين</th><th style="padding:8px;border:1px solid #d7dfeb">إجمالي المدفوع</th><th style="padding:8px;border:1px solid #d7dfeb">المتبقي عليه</th></tr></thead><tbody>${rows}</tbody><tfoot><tr><th colspan="2" style="padding:10px;border:1px solid #d7dfeb;text-align:right;background:#e8f5ef">الإجمالي الكلي لجميع العملاء</th><th style="padding:10px;border:1px solid #d7dfeb;text-align:right;background:#e8f5ef">${fmtTotals(grandDebt)}</th><th style="padding:10px;border:1px solid #d7dfeb;text-align:right;background:#e8f5ef;color:#16865f">${fmtTotals(grandPaid)}</th><th style="padding:10px;border:1px solid #d7dfeb;text-align:right;background:#e8f5ef;color:#c0392b">${fmtTotals(grandRemaining)}</th></tr></tfoot></table></div><div style="margin-top:8px;color:#555;font-size:12px">كل عميل يظهر مرة واحدة فقط، وتُجمع مبالغه حسب العملة دون تكرار الاسم أو خلط العملات.</div>`;
+    }
+
+    function escapeDebtScannerText(value) {
+        return String(value == null ? '' : value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+    }
+
+    function printCustomerDebtScanner() {
+        renderCustomerDebtScanner();
+        const content = document.getElementById('customer-debt-scanner-content');
+        if (!content || !content.innerHTML.trim()) return;
+        const win = window.open('', '_blank');
+        if (!win) { alert('يرجى السماح بالنوافذ المنبثقة للطباعة.'); return; }
+        win.document.write('<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>كشف ديون العملاء</title><style>body{font-family:Tahoma,Arial;padding:20px;direction:rtl}h2{text-align:center}table{width:100%;border-collapse:collapse}th,td{border:1px solid #777;padding:8px;text-align:right}th{background:#eee}tfoot th{font-weight:bold}</style></head><body><h2>كشف إجمالي ديون العملاء</h2>' + content.innerHTML + '</body></html>');
+        win.document.close(); win.focus(); win.print();
+    }
+
     function renderDebtsTable() {
         const tbody=document.getElementById('debts-table-body'); tbody.innerHTML='';
         const norm=v=>String(v||'').trim().replace(/\s+/g,' ').toLocaleLowerCase();
@@ -2099,6 +2181,8 @@
         });
         document.getElementById('total-debts-box').innerText='إجمالي الديون والآجل: '+(fmt(allTotals)||'0');
         renderOverdueDebtAlerts();
+        const scannerPanel = document.getElementById('customer-debt-scanner');
+        if (scannerPanel && scannerPanel.style.display !== 'none') renderCustomerDebtScanner();
     }
 
     function clearDebtFields() {
